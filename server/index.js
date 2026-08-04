@@ -11,8 +11,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dist = path.join(__dirname, "..", "dist");
 
 /* Fail at boot rather than at 2am mid-recipe. A missing key here is
- * always a misconfigured deploy, never a runtime condition. */
-for (const key of ["ANTHROPIC_API_KEY", "APP_PASSWORD", "SESSION_SECRET"]) {
+ * always a misconfigured deploy, never a runtime condition.
+ * ANTHROPIC_API_KEY is exempt under ANTHROPIC_AUTH_MODE=oauth (local-dev-only
+ * — see server/messages.js), where the ant CLI supplies credentials instead. */
+const requiredEnvVars = ["APP_PASSWORD", "SESSION_SECRET"];
+if (process.env.ANTHROPIC_AUTH_MODE !== "oauth") requiredEnvVars.push("ANTHROPIC_API_KEY");
+for (const key of requiredEnvVars) {
   if (!process.env[key]) {
     console.error(`Missing required environment variable: ${key}`);
     process.exit(1);

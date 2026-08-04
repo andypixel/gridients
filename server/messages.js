@@ -7,9 +7,43 @@
  * Only system/messages/max_tokens cross the boundary, and max_tokens
  * is clamped. */
 
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 const MAX_OUTPUT_TOKENS = Number(process.env.MAX_OUTPUT_TOKENS || 8000);
 const DAILY_CALL_LIMIT = Number(process.env.DAILY_CALL_LIMIT || 300);
+
+/* Local dev only: authenticate via a Claude subscription (through the `ant`
+ * CLI) instead of ANTHROPIC_API_KEY, so dev/testing usage draws from a
+ * personal plan's included usage rather than the metered production key.
+ * Never set this in Railway — production always uses ANTHROPIC_API_KEY. */
+const AUTH_MODE = process.env.ANTHROPIC_AUTH_MODE === "oauth" ? "oauth" : "api_key";
+
+/* OAuth access tokens are short-lived and `ant auth print-credentials`
+ * refreshes automatically, so fetching fresh on every call — rather than
+ * caching one — is the safe way to use it from a long-running dev server. */
+async function oauthHeaders() {
+  let stdout;
+  try {
+    ({ stdout } = await execFileAsync(
+      "ant",
+      ["auth", "print-credentials", "--access-token"],
+      { timeout: 10000 },
+    ));
+  } catch (e) {
+    throw new Error(
+      `Couldn't get Claude subscription credentials via \`ant\`: ${e.message}. ` +
+      `Is the ant CLI installed and are you logged in (\`ant auth login\`)?`,
+    );
+  }
+  return {
+    "Authorization": `Bearer ${stdout.trim()}`,
+    "anthropic-beta": "oauth-2025-04-20",
+  };
+}
 
 /* Blast-radius limit, not a fairness mechanism. In-memory and
  * per-process, so it resets on deploy and on wake from sleep —
@@ -46,12 +80,16 @@ function validate(body) {
  * when the API sends one, since a guessed backoff that undershoots
  * just burns another attempt. */
 async function callAnthropic(payload, attempt = 0) {
+  const authHeaders = AUTH_MODE === "oauth"
+    ? await oauthHeaders()
+    : { "x-api-key": process.env.ANTHROPIC_API_KEY };
+
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY,
       "anthropic-version": "2023-06-01",
+      ...authHeaders,
     },
     body: JSON.stringify(payload),
   });
@@ -69,7 +107,7 @@ async function callAnthropic(payload, attempt = 0) {
 }
 
 export async function handleMessages(req, res) {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (AUTH_MODE === "api_key" && !process.env.ANTHROPIC_API_KEY) {
     return res.status(500).json({ error: { message: "ANTHROPIC_API_KEY is not configured on the server." } });
   }
   if (!underDailyCap()) {

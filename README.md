@@ -34,6 +34,16 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 Open http://localhost:5173. Keep `COOKIE_SECURE=false` locally — dev is
 plain http, and a `Secure` cookie would never be stored.
 
+### Using your Claude subscription for dev instead of `ANTHROPIC_API_KEY`
+
+Set `ANTHROPIC_AUTH_MODE=oauth` in `.env` to authenticate local dev/testing
+calls through the [`ant` CLI](https://github.com/anthropics/anthropic-cli)
+(`ant auth login`) instead of `ANTHROPIC_API_KEY` — usage then draws from
+your personal Claude plan rather than whichever key ends up in Railway.
+Leave `ANTHROPIC_API_KEY` in `.env` too if you're using it as scratch space
+for the value you'll paste into Railway later; it's simply unused while
+`ANTHROPIC_AUTH_MODE=oauth` is set. Never set this variable in Railway.
+
 ## Deploy to Railway
 
 1. Push to GitHub, then **New Project → Deploy from GitHub repo** in the
@@ -85,6 +95,7 @@ health check at `/api/health`.
 | `MAX_OUTPUT_TOKENS` | `8000` | Server-side ceiling |
 | `DAILY_CALL_LIMIT` | `300` | Model calls per UTC day |
 | `COOKIE_SECURE` | secure on | Set `false` for local http |
+| `ANTHROPIC_AUTH_MODE` | unset (`ANTHROPIC_API_KEY`) | Set `oauth` for local dev only — never in Railway |
 
 `MAX_TOKENS` in `src/App.jsx` (currently 4000) is what the client asks
 for. Note that `INGREDIENT_LINES_PER_CALL = 12` exists solely because

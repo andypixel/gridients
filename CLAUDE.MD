@@ -91,12 +91,24 @@ rise — it remains a genuine fallback for an unusually large recipe.
 
 ## Environment
 
-Required: `ANTHROPIC_API_KEY`, `APP_PASSWORD`, `SESSION_SECRET`. The
-server exits at boot if any is missing — a missing key is always a
-misconfigured deploy, never a runtime condition.
+Required: `ANTHROPIC_API_KEY` (unless `ANTHROPIC_AUTH_MODE=oauth`),
+`APP_PASSWORD`, `SESSION_SECRET`. The server exits at boot if any
+required var is missing — a missing key is always a misconfigured
+deploy, never a runtime condition.
 
 Optional: `ANTHROPIC_MODEL`, `MAX_OUTPUT_TOKENS`, `DAILY_CALL_LIMIT`,
-`COOKIE_SECURE`, `PORT`.
+`COOKIE_SECURE`, `PORT`, `ANTHROPIC_AUTH_MODE`.
+
+**`ANTHROPIC_AUTH_MODE=oauth` is local-dev-only.** When set,
+`messages.js` authenticates via the `ant` CLI
+(`ant auth print-credentials --access-token`, sent as
+`Authorization: Bearer` + `anthropic-beta: oauth-2025-04-20`) instead of
+`ANTHROPIC_API_KEY` — dev/testing usage then draws from whatever Claude
+subscription `ant auth login` is signed into, separate from the metered
+key the deployed app uses. Requires the `ant` CLI installed and logged
+in. **Never set this in Railway** — production always authenticates
+with `ANTHROPIC_API_KEY`, and the boot check still requires it whenever
+this var is unset.
 
 Never commit `.env`. Never log request bodies from `/api/messages` —
 they contain full recipe text and prompts; token counts and stop reasons
