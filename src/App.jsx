@@ -853,6 +853,9 @@ export default function RecipeGridConverter() {
   const [showJSON, setShowJSON] = useState(false);
   const [showPrompts, setShowPrompts] = useState(false);
   const [copied, setCopied] = useState("");
+  const [screen, setScreen] = useState("input");
+  const [view, setView] = useState("grid");
+  const [reviewOpen, setReviewOpen] = useState(false);
   const exportRef = useRef("");
 
   useEffect(() => {
@@ -867,6 +870,10 @@ export default function RecipeGridConverter() {
   const activeLabels = active.map(({ i }) => labels[i]);
   const grid = useMemo(() => (tree ? buildGrid(tree.tree) : null), [tree]);
   const stale = tree && tree.count !== active.length;
+  const stepTexts = useMemo(() => (analysis ? analysis.steps.map((s) => stepText(s, lines)) : []), [analysis, lines]);
+  const reviewCount = analysis
+    ? (analysis.corrections || []).length + (analysis.issues || []).length + (analysis.warnings || []).length
+    : 0;
 
   if (grid && !stale) exportRef.current = exportHTML(grid, activeLabels, tree.prep, analysis.title);
 
@@ -885,6 +892,7 @@ export default function RecipeGridConverter() {
   }
 
   async function run() {
+    setScreen("result"); setView("grid"); setReviewOpen(false);
     setError(null); setAnalysis(null); setLabels([]); setRemoved([]); setTree(null); setStatus("Starting");
     try {
       const a = await analyze(lines, setStatus);
@@ -911,6 +919,7 @@ export default function RecipeGridConverter() {
 
   function editLabel(i, v) { const next = [...labels]; next[i] = v; setLabels(next); }
   function toggleRemoved(i) { setRemoved((r) => (r.includes(i) ? r.filter((x) => x !== i) : [...r, i])); }
+  function newRecipe() { setScreen("input"); }
 
   function copy(label, value) {
     navigator.clipboard.writeText(value).then(
@@ -925,195 +934,241 @@ export default function RecipeGridConverter() {
     <div className="rg">
       <style>{CSS}</style>
 
-      <header className="rg-head">
-        <span className="rg-eyebrow">Recipe → assembly diagram</span>
-        <h1>Table of Contents</h1>
-        <p className="rg-sub">
-          The whole paste is read first — ingredients checked against the directions, divided amounts separated, copy damage repaired — and only then is the chart built.
-        </p>
-      </header>
+      {screen === "input" && (
+        <div className="rg-input-shell">
+          <header className="rg-head">
+            <span className="rg-eyebrow">Recipe → assembly diagram</span>
+            <h1>Table of Contents</h1>
+            <p className="rg-sub">
+              The whole paste is read first — ingredients checked against the directions, divided amounts separated, copy damage repaired — and only then is the chart built.
+            </p>
+          </header>
 
-      <div className="rg-cols">
-        <section className="rg-panel">
-          <div className="rg-tabs">
-            <button type="button" className={mode === "paste" ? "rg-tab rg-tab-active" : "rg-tab"} onClick={() => setMode("paste")}>Paste text</button>
-            <button type="button" className={mode === "url" ? "rg-tab rg-tab-active" : "rg-tab"} onClick={() => setMode("url")}>From a URL</button>
+          <section className="rg-panel">
+            <div className="rg-tabs">
+              <button type="button" className={mode === "paste" ? "rg-tab rg-tab-active" : "rg-tab"} onClick={() => setMode("paste")}>Paste text</button>
+              <button type="button" className={mode === "url" ? "rg-tab rg-tab-active" : "rg-tab"} onClick={() => setMode("url")}>From a URL</button>
+            </div>
+
+            {mode === "paste" && (
+              <div className="rg-bar">
+                <label className="rg-label" htmlFor="rg-src">Recipe text</label>
+                <span className="rg-samples">
+                  {Object.keys(SAMPLES).map((k) => (
+                    <button key={k} type="button" onClick={() => { setText(SAMPLES[k]); setFetchedFrom(null); }}>{k}</button>
+                  ))}
+                </span>
+              </div>
+            )}
+
+            {mode === "url" && (
+              <div className="rg-urlrow">
+                <input
+                  className="rg-urlinput"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") fetchUrl(); }}
+                  placeholder="https://example.com/some-recipe"
+                  spellCheck={false}
+                />
+                <button className="rg-fetch" onClick={fetchUrl} disabled={urlFetching || !urlInput.trim()}>
+                  {urlFetching ? "Fetching…" : "Fetch"}
+                </button>
+              </div>
+            )}
+
+            {mode === "url" && urlError && (
+              <p className="rg-urlerror">{urlError}</p>
+            )}
+
+            {fetchedFrom && (
+              <p className="rg-fetched">
+                Pulled from <strong>{fetchedFrom.method}</strong> at {fetchedFrom.url} — review below before converting.
+              </p>
+            )}
+
+            <textarea
+              id="rg-src"
+              className="rg-textarea"
+              value={text}
+              onChange={(e) => { setText(e.target.value); setFetchedFrom(null); }}
+              spellCheck={false}
+              placeholder={mode === "url" ? "Fetched text will appear here for review — you can still edit it." : undefined}
+            />
+
+            <button className="rg-go" onClick={run} disabled={busy || lines.length < 4}>
+              {busy ? `${status}…` : analysis ? "Start over" : "Convert recipe"}
+            </button>
+          </section>
+        </div>
+      )}
+
+      {screen === "result" && (
+        <div className="rg-result-shell">
+          <div className="rg-topbar">
+            <span className="rg-topbar-title">
+              {analysis ? (analysis.title || "Untitled") : busy ? "Converting…" : error ? "Couldn't convert" : ""}
+            </span>
+
+            {analysis && !busy && (
+              <div className="rg-viewtabs">
+                <button type="button" className={view === "grid" ? "rg-viewtab rg-viewtab-active" : "rg-viewtab"} onClick={() => setView("grid")}>Grid</button>
+                <button type="button" className={view === "linear" ? "rg-viewtab rg-viewtab-active" : "rg-viewtab"} onClick={() => setView("linear")}>Linear</button>
+                <button type="button" className={view === "original" ? "rg-viewtab rg-viewtab-active" : "rg-viewtab"} onClick={() => setView("original")}>Original</button>
+              </div>
+            )}
+
+            {analysis && !busy && (
+              <button type="button" className="rg-review-toggle" onClick={() => setReviewOpen((v) => !v)}>
+                Review &amp; fix
+                {reviewCount > 0 && <em className={stale ? "rg-tag rg-tag-warn" : "rg-tag"}>{reviewCount}</em>}
+              </button>
+            )}
+
+            <button type="button" className="rg-newrecipe" onClick={newRecipe}>New recipe</button>
           </div>
 
-          {mode === "paste" && (
-            <div className="rg-bar">
-              <label className="rg-label" htmlFor="rg-src">Recipe text</label>
-              <span className="rg-samples">
-                {Object.keys(SAMPLES).map((k) => (
-                  <button key={k} type="button" onClick={() => { setText(SAMPLES[k]); setFetchedFrom(null); }}>{k}</button>
-                ))}
-              </span>
-            </div>
-          )}
+          <div className="rg-content">
+            {busy && <div className="rg-busy"><p>{status}…</p></div>}
 
-          {mode === "url" && (
-            <div className="rg-urlrow">
-              <input
-                className="rg-urlinput"
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") fetchUrl(); }}
-                placeholder="https://example.com/some-recipe"
-                spellCheck={false}
-              />
-              <button className="rg-fetch" onClick={fetchUrl} disabled={urlFetching || !urlInput.trim()}>
-                {urlFetching ? "Fetching…" : "Fetch"}
-              </button>
-            </div>
-          )}
-
-          {mode === "url" && urlError && (
-            <p className="rg-urlerror">{urlError}</p>
-          )}
-
-          {fetchedFrom && (
-            <p className="rg-fetched">
-              Pulled from <strong>{fetchedFrom.method}</strong> at {fetchedFrom.url} — review below before converting.
-            </p>
-          )}
-
-          <textarea
-            id="rg-src"
-            className="rg-textarea"
-            value={text}
-            onChange={(e) => { setText(e.target.value); setFetchedFrom(null); }}
-            spellCheck={false}
-            placeholder={mode === "url" ? "Fetched text will appear here for review — you can still edit it." : undefined}
-          />
-
-          <button className="rg-go" onClick={run} disabled={busy || lines.length < 4}>
-            {busy ? `${status}…` : analysis ? "Start over" : "Convert recipe"}
-          </button>
-
-          {analysis && (
-            <>
-              <div className="rg-bar">
-                <span className="rg-label">Ingredients as understood</span>
-                <span className="rg-count">{active.length} of {analysis.ingredients.length}</span>
+            {error && (
+              <div className="rg-error">
+                <strong>{error.message}</strong>
+                {error.details && <ul>{error.details.map((d, i) => <li key={i}>{d}</li>)}</ul>}
               </div>
-              <p className="rg-hint">Edit any row; the chart follows. Removing one needs a redraw.</p>
+            )}
 
-              <ol className="rg-ings">
-                {analysis.ingredients.map((ing, i) => {
-                  const gone = removed.includes(i);
-                  return (
-                    <li key={ing.id || i} className={gone ? "rg-gone" : ""}>
-                      <input value={labels[i] || ""} onChange={(e) => editLabel(i, e.target.value)} disabled={gone} />
-                      <span className="rg-tags">
-                        {ing.split && <em className="rg-tag rg-tag-split">split</em>}
-                        {Array.isArray(ing.usedIn) && ing.usedIn.length === 0 && <em className="rg-tag rg-tag-warn">unused</em>}
-                        {Array.isArray(ing.usedIn) && ing.usedIn.length > 0 && <em className="rg-tag">→{ing.usedIn.join(",")}</em>}
-                      </span>
-                      <button type="button" onClick={() => toggleRemoved(i)} title={gone ? "Restore" : "Remove"}>{gone ? "+" : "×"}</button>
-                    </li>
-                  );
-                })}
-              </ol>
+            {analysis && !busy && (
+              <>
+                {reviewOpen && (
+                  <div className="rg-review">
+                    {(analysis.corrections || []).length > 0 && (
+                      <div className="rg-notes">
+                        <span className="rg-label">Corrections applied</span>
+                        <ul>
+                          {analysis.corrections.map((c, i) => (
+                            <li key={i}>
+                              <em className={`rg-tag rg-kind-${c.kind}`}>{KIND_LABEL[c.kind] || c.kind}</em>
+                              <span><strong>{c.what}</strong> — {c.why}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
-              {stale && (
-                <button className="rg-go rg-redraw" onClick={redraw} disabled={busy || active.length < 2}>
-                  {busy ? `${status}…` : "Redraw the diagram"}
-                </button>
-              )}
-            </>
-          )}
-        </section>
+                    {((analysis.issues || []).length > 0 || (analysis.warnings || []).length > 0) && (
+                      <div className="rg-notes rg-flagged">
+                        <span className="rg-label">Left for you to judge</span>
+                        <ul>
+                          {[...(analysis.issues || []), ...(analysis.warnings || [])].map((s, i) => <li key={i}><span>{s}</span></li>)}
+                        </ul>
+                      </div>
+                    )}
 
-        <section className="rg-panel rg-out">
-          {!analysis && !error && !busy && (
-            <div className="rg-empty">
-              <p>The analysis and diagram appear here.</p>
-              <p className="rg-hint">Three samples: a clean paste, your Food.com paste with quantities on their own lines, and a recipe with a divided ingredient that has to be split in two.</p>
-            </div>
-          )}
+                    <div className="rg-bar">
+                      <span className="rg-label">Ingredients as understood</span>
+                      <span className="rg-count">{active.length} of {analysis.ingredients.length}</span>
+                    </div>
+                    <p className="rg-hint">Edit any row; the chart follows. Removing one needs a redraw.</p>
 
-          {busy && <div className="rg-empty"><p>{status}…</p></div>}
+                    <ol className="rg-ings">
+                      {analysis.ingredients.map((ing, i) => {
+                        const gone = removed.includes(i);
+                        return (
+                          <li key={ing.id || i} className={gone ? "rg-gone" : ""}>
+                            <input value={labels[i] || ""} onChange={(e) => editLabel(i, e.target.value)} disabled={gone} />
+                            <span className="rg-tags">
+                              {ing.split && <em className="rg-tag rg-tag-split">split</em>}
+                              {Array.isArray(ing.usedIn) && ing.usedIn.length === 0 && <em className="rg-tag rg-tag-warn">unused</em>}
+                              {Array.isArray(ing.usedIn) && ing.usedIn.length > 0 && <em className="rg-tag">→{ing.usedIn.join(",")}</em>}
+                            </span>
+                            <button type="button" onClick={() => toggleRemoved(i)} title={gone ? "Restore" : "Remove"}>{gone ? "+" : "×"}</button>
+                          </li>
+                        );
+                      })}
+                    </ol>
 
-          {error && (
-            <div className="rg-error">
-              <strong>{error.message}</strong>
-              {error.details && <ul>{error.details.map((d, i) => <li key={i}>{d}</li>)}</ul>}
-            </div>
-          )}
+                    {stale && (
+                      <button className="rg-go rg-redraw" onClick={redraw} disabled={busy || active.length < 2}>
+                        {busy ? `${status}…` : "Redraw the diagram"}
+                      </button>
+                    )}
 
-          {analysis && !busy && (
-            <>
-              {(analysis.corrections || []).length > 0 && (
-                <div className="rg-notes">
-                  <span className="rg-label">Corrections applied</span>
-                  <ul>
-                    {analysis.corrections.map((c, i) => (
-                      <li key={i}>
-                        <em className={`rg-tag rg-kind-${c.kind}`}>{KIND_LABEL[c.kind] || c.kind}</em>
-                        <span><strong>{c.what}</strong> — {c.why}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {((analysis.issues || []).length > 0 || (analysis.warnings || []).length > 0) && (
-                <div className="rg-notes rg-flagged">
-                  <span className="rg-label">Left for you to judge</span>
-                  <ul>
-                    {[...(analysis.issues || []), ...(analysis.warnings || [])].map((s, i) => <li key={i}><span>{s}</span></li>)}
-                  </ul>
-                </div>
-              )}
-
-              {stale && <p className="rg-stale">The ingredient list changed. Redraw to rebuild the chart.</p>}
-
-              {grid && !stale && (
-                <>
-                  <div className="rg-block">
-                    <span>{analysis.title || "Untitled"}</span>
-                    <span>{active.length} ingredients</span>
-                    <span>{grid.cols} steps</span>
+                    {grid && !stale && (
+                      <div className="rg-review-dev">
+                        <span className="rg-label">Developer</span>
+                        <div className="rg-actions">
+                          <button onClick={() => copy("html", exportRef.current)}>{copied === "html" ? "Copied" : "Copy table HTML"}</button>
+                          <button onClick={() => setShowJSON((v) => !v)}>{showJSON ? "Hide data" : "Show data"}</button>
+                          <button onClick={() => setShowPrompts((v) => !v)}>{showPrompts ? "Hide prompts" : "Show prompts"}</button>
+                        </div>
+                        {showJSON && <pre className="rg-pre">{JSON.stringify({ analysis, tree }, null, 2)}</pre>}
+                        {showPrompts && <pre className="rg-pre">{`PASS 1a — STEPS\n\n${STEP_PROMPT}\n\n\nPASS 1b — INGREDIENTS\n\n${INGREDIENT_PROMPT}\n\n\nPASS 1c — MISSING INGREDIENTS (large recipes only)\n\n${ADDITIONS_PROMPT}\n\n\nPASS 2 — STRUCTURE\n\n${STRUCTURE_PROMPT}`}</pre>}
+                      </div>
+                    )}
                   </div>
+                )}
 
-                  <div className="rg-scroll">
-                    <table className="rg-table">
-                      <tbody>
-                        {(tree.prep || []).map((p, i) => (
-                          <tr key={`p${i}`}><td className="rg-prep" colSpan={grid.cols + 1}>{p}</td></tr>
-                        ))}
-                        {grid.byRow.map((cells, r) => (
-                          <tr key={r}>
-                            <td className="rg-ingcell">{activeLabels[grid.leaves[r]]}</td>
-                            {cells.map((c, i) => c.blank
-                              ? <td key={i} className="rg-gap" rowSpan={c.rowSpan} colSpan={c.colSpan} />
-                              : <td key={i} className="rg-op" rowSpan={c.rowSpan} colSpan={c.colSpan} style={{ animationDelay: `${c.col * 55}ms` }}>{c.op}</td>
-                            )}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                {stale && <p className="rg-stale">The ingredient list changed. Redraw to rebuild the chart.</p>}
+
+                {view === "grid" && grid && !stale && (
+                  <>
+                    <div className="rg-block">
+                      <span>{analysis.title || "Untitled"}</span>
+                      <span>{active.length} ingredients</span>
+                      <span>{grid.cols} steps</span>
+                    </div>
+
+                    <div className="rg-scroll">
+                      <table className="rg-table">
+                        <tbody>
+                          {(tree.prep || []).map((p, i) => (
+                            <tr key={`p${i}`}><td className="rg-prep" colSpan={grid.cols + 1}>{p}</td></tr>
+                          ))}
+                          {grid.byRow.map((cells, r) => (
+                            <tr key={r}>
+                              <td className="rg-ingcell">{activeLabels[grid.leaves[r]]}</td>
+                              {cells.map((c, i) => c.blank
+                                ? <td key={i} className="rg-gap" rowSpan={c.rowSpan} colSpan={c.colSpan} />
+                                : <td key={i} className="rg-op" rowSpan={c.rowSpan} colSpan={c.colSpan} style={{ animationDelay: `${c.col * 55}ms` }}>{c.op}</td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+
+                {view === "linear" && (
+                  <div className="rg-linear">
+                    <h2>{analysis.title || "Untitled"}</h2>
+                    <h3>Ingredients</h3>
+                    <ul>
+                      {activeLabels.map((label, i) => <li key={i}>{label}</li>)}
+                    </ul>
+                    <h3>Directions</h3>
+                    <ol>
+                      {stepTexts.map((s, i) => <li key={i}>{s.replace(/^\s*\d+[.)]\s*/, "")}</li>)}
+                    </ol>
                   </div>
+                )}
 
-                  <div className="rg-actions">
-                    <button onClick={() => copy("html", exportRef.current)}>{copied === "html" ? "Copied" : "Copy table HTML"}</button>
-                    <button onClick={() => setShowJSON((v) => !v)}>{showJSON ? "Hide data" : "Show data"}</button>
-                    <button onClick={() => setShowPrompts((v) => !v)}>{showPrompts ? "Hide prompts" : "Show prompts"}</button>
-                  </div>
-
-                  {showJSON && <pre className="rg-pre">{JSON.stringify({ analysis, tree }, null, 2)}</pre>}
-                  {showPrompts && <pre className="rg-pre">{`PASS 1a — STEPS\n\n${STEP_PROMPT}\n\n\nPASS 1b — INGREDIENTS\n\n${INGREDIENT_PROMPT}\n\n\nPASS 1c — MISSING INGREDIENTS (large recipes only)\n\n${ADDITIONS_PROMPT}\n\n\nPASS 2 — STRUCTURE\n\n${STRUCTURE_PROMPT}`}</pre>}
-                </>
-              )}
-            </>
-          )}
-        </section>
-      </div>
+                {view === "original" && (
+                  <pre className="rg-original">{text}</pre>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 const CSS = `
+html, body, #root { height: 100%; margin: 0; }
+
 .rg {
   --ink: #16181c;
   --paper: #e7eae1;
@@ -1126,23 +1181,23 @@ const CSS = `
   --flag-tint: #f2e5d6;
   background: var(--paper); color: var(--ink);
   font: 15px/1.5 "Helvetica Neue", Arial, sans-serif;
-  padding: 28px 24px 40px; min-height: 100%;
+  height: 100%;
 }
 .rg *, .rg *::before, .rg *::after { box-sizing: border-box; }
 .rg button:focus-visible, .rg textarea:focus-visible, .rg input:focus-visible { outline: 2px solid var(--pen); outline-offset: 1px; }
 
 .rg-eyebrow, .rg-label, .rg-count, .rg-block, .rg-op, .rg-actions button,
-.rg-go, .rg-samples button, .rg-tag, .rg-ings button {
+.rg-go, .rg-samples button, .rg-tag, .rg-ings button,
+.rg-topbar-title, .rg-viewtab, .rg-review-toggle, .rg-newrecipe {
   font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
+
+.rg-input-shell { max-width: 640px; margin: 0 auto; padding: 28px 24px 40px; }
 
 .rg-head { max-width: 66ch; margin-bottom: 26px; }
 .rg-eyebrow { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--pen); }
 .rg-head h1 { font-size: 30px; letter-spacing: -.02em; margin: 6px 0 8px; font-weight: 700; }
 .rg-sub { margin: 0; color: var(--dim); font-size: 14px; }
-
-.rg-cols { display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); gap: 22px; align-items: start; }
-@media (max-width: 920px) { .rg-cols { grid-template-columns: 1fr; } }
 
 .rg-panel { background: var(--panel); border: 1px solid var(--rule); padding: 16px; }
 .rg-label { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
@@ -1205,11 +1260,56 @@ const CSS = `
 .rg-tag-warn { background: #f3d9d9; color: #8a2020; }
 .rg-kind-split, .rg-kind-add, .rg-kind-drop { background: var(--flag-tint); color: var(--flag); }
 
-.rg-out { min-height: 320px; }
-.rg-empty { color: var(--dim); padding: 36px 4px; }
-.rg-empty p { margin: 0 0 6px; }
-.rg-error { border-left: 3px solid #a32020; padding: 10px 0 10px 12px; }
+.rg-result-shell { height: 100dvh; display: flex; flex-direction: column; }
+
+.rg-topbar {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 14px 20px; border-bottom: 1px solid var(--rule); background: var(--panel); flex-shrink: 0;
+}
+.rg-topbar-title { font-size: 12px; color: var(--dim); letter-spacing: .04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.rg-viewtabs { display: flex; gap: 6px; }
+.rg-viewtab {
+  background: none; border: 1px solid var(--rule); padding: 8px 16px;
+  font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); cursor: pointer;
+}
+.rg-viewtab:hover { border-color: var(--pen); color: var(--pen); }
+.rg-viewtab-active { background: var(--pen); border-color: var(--pen); color: #fff; }
+
+.rg-review-toggle {
+  display: flex; align-items: center; gap: 6px;
+  background: none; border: 1px solid var(--rule); padding: 7px 12px;
+  font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink); cursor: pointer;
+}
+.rg-review-toggle:hover { border-color: var(--pen); color: var(--pen); }
+
+.rg-newrecipe {
+  margin-left: auto; background: none; border: 0; color: var(--dim);
+  font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; padding: 7px 4px;
+}
+.rg-newrecipe:hover { color: var(--pen); }
+
+.rg-content { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 24px; }
+
+.rg-busy { display: flex; align-items: center; justify-content: center; min-height: 50vh; color: var(--dim); font-size: 15px; }
+.rg-busy p { margin: 0; }
+.rg-error { border-left: 3px solid #a32020; padding: 10px 0 10px 12px; margin-bottom: 16px; }
 .rg-error ul { margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: var(--dim); }
+
+.rg-review { background: var(--panel); border: 1px solid var(--rule); padding: 16px; margin-bottom: 18px; }
+.rg-review-dev { border-top: 1px solid var(--rule); margin-top: 16px; padding-top: 12px; }
+
+.rg-linear { max-width: 70ch; }
+.rg-linear h2 { font-size: 22px; letter-spacing: -.01em; margin: 0 0 14px; }
+.rg-linear h3 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); margin: 18px 0 8px; }
+.rg-linear h3:first-of-type { margin-top: 0; }
+.rg-linear ul, .rg-linear ol { margin: 0; padding-left: 22px; font-size: 14px; line-height: 1.6; }
+
+.rg-original {
+  max-width: 70ch; font: 13px/1.6 ui-monospace, Menlo, Consolas, monospace;
+  white-space: pre-wrap; word-break: break-word;
+  background: #fff; border: 1px solid var(--rule); padding: 14px 16px; margin: 0;
+}
 
 .rg-notes { margin-bottom: 16px; }
 .rg-notes ul { list-style: none; margin: 7px 0 0; padding: 0; }
@@ -1244,4 +1344,22 @@ const CSS = `
 .rg-actions button:hover { border-color: var(--pen); color: var(--pen); }
 
 .rg-pre { margin: 12px 0 0; padding: 11px; background: #fff; border: 1px solid var(--rule); font: 11.5px/1.5 ui-monospace, Menlo, Consolas, monospace; max-height: 320px; overflow: auto; white-space: pre-wrap; }
+
+@media (max-width: 899px) {
+  .rg-topbar { padding: 10px 14px; }
+  .rg-content { padding: 14px 16px; }
+  .rg-viewtab, .rg-review-toggle, .rg-newrecipe { min-height: 44px; }
+}
+
+@media (max-width: 599px) {
+  .rg-input-shell { padding: 20px 16px 32px; }
+  .rg-topbar { flex-direction: column; align-items: stretch; gap: 8px; }
+  .rg-topbar-title { order: 1; text-align: center; white-space: normal; }
+  .rg-newrecipe { order: 2; margin-left: 0; align-self: center; }
+  .rg-viewtabs { order: 3; width: 100%; }
+  .rg-viewtab { flex: 1; padding: 10px 4px; }
+  .rg-review-toggle { order: 4; justify-content: center; }
+  .rg-content { padding: 14px; }
+  .rg-linear, .rg-original { max-width: 100%; }
+}
 `;

@@ -1,7 +1,25 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell(& \"$env:LOCALAPPDATA\\\\ant\\\\ant.exe\" --version)"
+      "PowerShell(& \"$env:LOCALAPPDATA\\\\ant\\\\ant.exe\" --version)",
+      "Bash(npm run *)",
+      "Bash(netstat -ano)",
+      "Bash(curl -s -o /dev/null -w \"3000 /api/health: %{http_code}\\\\n\" http://localhost:3000/api/health)",
+      "Bash(curl -s -o /dev/null -w \"5173: %{http_code}\\\\n\" http://localhost:5173/)",
+      "Bash(command -v chromium-cli)",
+      "Bash(npx --no-install playwright --version)",
+      "Bash(node -e \"require.resolve\\('playwright'\\)\")",
+      "Bash(npm ls *)",
+      "Bash(npx -y playwright@1.62.1 install chromium)",
+      "Bash(ls \"C:\\\\Users\\\\andre\\\\AppData\\\\Local\\\\ms-playwright\\\\\" 2>&1)",
+      "Read(//c/Users/andre/AppData/Local/**)",
+      "Bash(ls -la /c/Users/andre/AppData/Local/ms-playwright/)",
+      "Read(//c/Users/andre/AppData/Local/ms-playwright//**)",
+      "Bash(npx --package=playwright@1.62.1 -y node -e \"console.log\\(require.resolve\\('playwright'\\)\\)\")",
+      "Bash(npm install *)",
+      "Bash(curl -s -o /dev/null -w \"5174: %{http_code}\\\\n\" http://localhost:5174/)",
+      "Bash(node verify.js)",
+      "Bash(tasklist)"
     ]
   }
 }
