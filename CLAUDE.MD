@@ -12,13 +12,14 @@ traffic to engineer for.
 ## Layout
 
 ```
-src/App.jsx           entire client app + pipeline (~1200 lines, single file by design)
-src/LoginGate.jsx     password screen
-src/main.jsx          React root
-server/index.js       Express: routes, static serving, SPA fallback
-server/auth.js        shared password → HMAC-signed cookie
-server/messages.js    Anthropic Messages proxy
-server/fetchPage.js   URL fetch proxy with SSRF guards
+index.html             Vite entry — loads src/main.jsx as a module
+src/App.jsx            entire client app + pipeline (~1200 lines, single file by design)
+src/LoginGate.jsx      password screen
+src/main.jsx           React root
+server/index.js        Express: routes, static serving, SPA fallback
+server/auth.js         shared password → HMAC-signed cookie
+server/messages.js     Anthropic Messages proxy
+server/fetchPage.js    URL fetch proxy with SSRF guards
 ```
 
 Frontend and API are the same origin — Express serves `dist/` and
@@ -100,7 +101,7 @@ Optional: `ANTHROPIC_MODEL`, `MAX_OUTPUT_TOKENS`, `DAILY_CALL_LIMIT`,
 `COOKIE_SECURE`, `PORT`, `ANTHROPIC_AUTH_MODE`.
 
 **`ANTHROPIC_AUTH_MODE=oauth` is local-dev-only.** When set,
-`messages.js` authenticates via the `ant` CLI
+`server/messages.js` authenticates via the `ant` CLI
 (`ant auth print-credentials --access-token`, sent as
 `Authorization: Bearer` + `anthropic-beta: oauth-2025-04-20`) instead of
 `ANTHROPIC_API_KEY` — dev/testing usage then draws from whatever Claude
