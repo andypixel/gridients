@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(& \"$env:LOCALAPPDATA\\\\ant\\\\ant.exe\" --version)"
+    ]
+  }
+}
