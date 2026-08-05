@@ -733,94 +733,6 @@ ${rows.join("\n")}
  * Samples
  * ================================================================== */
 
-const SAMPLES = {
-  "Clean paste": `Fudgy Espresso Brownies
-
-4 oz (115 g) unsalted butter
-1 cup (200 g) sugar
-1/4 tsp. (2.5 mL) vanilla extract
-1 shot (4 Tbs; 60 mL) fresh brewed espresso or very strong coffee
-2 large (100 g) eggs
-1/2 cup (80 g) all-purpose flour
-1/3 cup (40 g) Hershey's cocoa powder
-1/4 tsp. (1.3 g) baking soda
-1/4 tsp. (1.5 g) table salt
-
-Instructions
-1. Butter and flour an 8x8-inch pan. Preheat the oven to 350F (170C).
-2. Melt the butter in a small saucepan over low heat.
-3. In a bowl, mix the sugar, vanilla extract, and espresso together.
-4. Pour the melted butter into the sugar mixture and mix until smooth.
-5. Fold in the eggs, flour, cocoa powder, baking soda, and salt until just combined.
-6. Pour into the prepared pan and bake at 350F for 30 to 40 minutes.`,
-
-  "Split quantities": `Nutrition information
-ingredients
-Units: US
-12 -15
-hatch green chilies (if not available anaheim will work too)
-2
-lbs pork shoulder
-2
-tablespoons vegetable oil
-1\u20442
-cup onion, finely chopped
-2
-minced garlic cloves
-1 -2
-jalapeno, diced (only necessary if using anaheim chiles)
-6
-cups chicken broth
-6
-ounces beer (optional)
-1\u20442
-teaspoon oregano
-1
-teaspoon salt
-1
-teaspoon pepper
-3
-bay leaves
-1\u20442
-teaspoon cumin
-1
-(10 ounce) can diced tomatoes
-3
-large potatoes, diced 1/2-inch
-2
-tablespoons butter
-2
-tablespoons flour
-directions
-Broil green chiles in the oven turning often to evenly darken skin making sure they don't burn.
-Remove from oven and cover with a dish cloth for 10 minutes to steam the skins off.
-While the chiles are resting, cube the meat, sprinkle with salt & pepper and brown with onions & garlic in oil in a large pot for 5 minutes.
-add jalepeno, broth, half a can of beer, spices.bring to a simmer.
-let simmer for 1 hour.
-Peel skin from chiles, chop and add to the pot (including the seeds).
-Let simmer for 30 minutes then add the tomatoes & potatoes (add a cup of hot water if needed).
-Simmer until potatoes are done.
-melt butter in a small skillet & add flour, cook for 2 minutes stirring constantly -- add to the pot.`,
-
-  "Divided ingredient": `Skillet Cornbread
-
-1 cup buttermilk
-1 large egg
-1 cup stone-ground cornmeal
-1 tsp baking soda
-1 tsp kosher salt
-4 tablespoons butter, divided
-2 tablespoons honey
-
-Directions
-Preheat the oven to 425F.
-Melt 2 tablespoons of the butter in a 9-inch cast iron skillet and swirl to coat, then set aside.
-Whisk the buttermilk and egg together in a bowl.
-Stir in the cornmeal, baking soda, and salt until just combined.
-Pour the batter into the hot skillet and bake 20 to 25 minutes.
-Melt the remaining 2 tablespoons butter with the honey and brush over the warm cornbread.`,
-};
-
 /* ================================================================== *
  * UI
  * ================================================================== */
@@ -863,7 +775,7 @@ export function GridTable({ title, activeLabels, grid, prep }) {
 
 export default function RecipeGridConverter() {
   const [mode, setMode] = useState("paste");
-  const [text, setText] = useState(SAMPLES["Clean paste"]);
+  const [text, setText] = useState("");
   const [urlInput, setUrlInput] = useState("");
   const [urlFetching, setUrlFetching] = useState(false);
   const [urlError, setUrlError] = useState(null);
@@ -982,11 +894,6 @@ export default function RecipeGridConverter() {
             {mode === "paste" && (
               <div className="rg-bar">
                 <label className="rg-label" htmlFor="rg-src">Recipe text</label>
-                <span className="rg-samples">
-                  {Object.keys(SAMPLES).map((k) => (
-                    <button key={k} type="button" onClick={() => { setText(SAMPLES[k]); setFetchedFrom(null); }}>{k}</button>
-                  ))}
-                </span>
               </div>
             )}
 
@@ -1054,6 +961,10 @@ export default function RecipeGridConverter() {
                 Review &amp; fix
                 {reviewCount > 0 && <em className={stale ? "rg-tag rg-tag-warn" : "rg-tag"}>{reviewCount}</em>}
               </button>
+            )}
+
+            {analysis && !busy && (
+              <button type="button" className="rg-print" onClick={() => window.print()}>Print</button>
             )}
 
             <button type="button" className="rg-newrecipe" onClick={newRecipe}>New recipe</button>
@@ -1184,8 +1095,8 @@ html, body, #root { height: 100%; margin: 0; }
 .rg button:focus-visible, .rg textarea:focus-visible, .rg input:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
 
 .rg-eyebrow, .rg-label, .rg-count, .rg-block, .rg-op, .rg-actions button,
-.rg-go, .rg-samples button, .rg-tag, .rg-ings button,
-.rg-topbar-title, .rg-viewtab, .rg-review-toggle, .rg-newrecipe,
+.rg-go, .rg-tag, .rg-ings button,
+.rg-topbar-title, .rg-viewtab, .rg-review-toggle, .rg-print, .rg-newrecipe,
 .rg-tab, .rg-urlinput, .rg-fetch, .rg-textarea, .rg-original, .rg-pre, .rg-linear h3, .rg-prep {
   font-family: var(--font-mono);
 }
@@ -1206,8 +1117,6 @@ html, body, #root { height: 100%; margin: 0; }
 .rg-bar:first-child { margin-top: 0; }
 .rg-count { font-size: 11px; color: var(--ink); }
 
-.rg-samples { display: flex; gap: 5px; flex-wrap: wrap; }
-.rg-samples button { background: none; border: var(--border-width) solid var(--rule); color: var(--ink-dim); font-size: 10px; padding: 3px 7px; cursor: pointer; border-radius: var(--radius); }
 
 .rg-tabs { display: flex; gap: 0; margin-bottom: 16px; border-bottom: var(--border-width) solid var(--rule); }
 .rg-tab {
@@ -1281,8 +1190,13 @@ html, body, #root { height: 100%; margin: 0; }
   font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink); cursor: pointer;
 }
 
+.rg-print {
+  margin-left: auto; background: none; border: var(--border-width) solid var(--rule); color: var(--ink);
+  font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; padding: 7px 12px; border-radius: var(--radius);
+}
+
 .rg-newrecipe {
-  margin-left: auto; background: none; border: 0; color: var(--ink-dim);
+  background: none; border: 0; color: var(--ink-dim);
   font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; padding: 7px 4px;
 }
 
@@ -1346,17 +1260,18 @@ html, body, #root { height: 100%; margin: 0; }
 @media (max-width: 899px) {
   .rg-topbar { padding: 10px 14px; }
   .rg-content { padding: 14px 16px; }
-  .rg-viewtab, .rg-review-toggle, .rg-newrecipe { min-height: 44px; }
+  .rg-viewtab, .rg-review-toggle, .rg-print, .rg-newrecipe { min-height: 44px; }
 }
 
 @media (max-width: 599px) {
   .rg-input-shell { padding: 20px 16px 32px; }
   .rg-topbar { flex-direction: column; align-items: stretch; gap: 8px; }
   .rg-topbar-title { order: 1; text-align: center; white-space: normal; }
-  .rg-newrecipe { order: 2; margin-left: 0; align-self: center; }
-  .rg-viewtabs { order: 3; width: 100%; }
+  .rg-print { order: 2; margin-left: 0; align-self: center; }
+  .rg-newrecipe { order: 3; align-self: center; }
+  .rg-viewtabs { order: 4; width: 100%; }
   .rg-viewtab { flex: 1; padding: 10px 4px; }
-  .rg-review-toggle { order: 4; justify-content: center; }
+  .rg-review-toggle { order: 5; justify-content: center; }
   .rg-content { padding: 14px; }
   .rg-linear, .rg-original { max-width: 100%; }
 }
