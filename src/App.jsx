@@ -970,7 +970,7 @@ export default function RecipeGridConverter() {
             </div>
           </header>
           <p className="rg-sub">
-            The whole paste is read first — ingredients checked against the directions, divided amounts separated, copy damage repaired — and only then is the chart built.
+            When copy/pasting a recipe, be sure to include the dish title, ingredients and directions, and remove any unrelated text. The more complete the input, the better the output.
           </p>
 
           <section className="rg-panel">
@@ -1197,7 +1197,7 @@ html, body, #root { height: 100%; margin: 0; }
 .rg-head .rg-wordmark { height: 28px; width: auto; }
 .rg-head-text { display: flex; flex-direction: column; }
 .rg-eyebrow { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-dim); }
-.rg-sub { margin: 10px 0 0; color: var(--ink-dim); font-size: 14px; max-width: 66ch; }
+.rg-sub { margin: 10px 0 20px; color: var(--ink); font-size: 16px; font-weight: 300; max-width: 66ch; }
 
 .rg-panel { background: var(--paper); border: var(--border-width) solid var(--rule); padding: 16px; }
 .rg-label { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-dim); }

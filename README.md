@@ -37,10 +37,13 @@ for the value you'll paste into Railway later; it's simply unused while
 
 ## Deploy to Railway
 
-1. Push to GitHub, then **New Project → Deploy from GitHub repo** in the
-   same Railway project you already have. A second service in an
-   existing project shares your $5 usage credit rather than adding a
-   subscription.
+Runs as its own dedicated Railway project (not a service inside another
+project) under the same account as any other existing project.
+
+1. Push to GitHub, then in Railway: **New Project → Deploy from GitHub
+   repo**, selecting `gridients`. If the repo isn't in the picker,
+   Railway's GitHub App is scoped to specific repos — GitHub →
+   Settings → Applications → Railway → Configure, and add it.
 2. Under **Variables**, set:
    - `ANTHROPIC_API_KEY`
 
