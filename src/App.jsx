@@ -774,7 +774,7 @@ export function GridTable({ title, activeLabels, grid, prep }) {
 }
 
 export default function RecipeGridConverter() {
-  const [mode, setMode] = useState("paste");
+  const [mode, setMode] = useState("url");
   const [text, setText] = useState("");
   const [urlInput, setUrlInput] = useState("");
   const [urlFetching, setUrlFetching] = useState(false);
@@ -857,7 +857,28 @@ export default function RecipeGridConverter() {
 
   function editLabel(i, v) { const next = [...labels]; next[i] = v; setLabels(next); }
   function toggleRemoved(i) { setRemoved((r) => (r.includes(i) ? r.filter((x) => x !== i) : [...r, i])); }
-  function newRecipe() { setScreen("input"); }
+  function newRecipe() {
+    setScreen("input");
+    setMode("url");
+    setText("");
+    setUrlInput("");
+    setUrlFetching(false);
+    setUrlError(null);
+    setFetchedFrom(null);
+    setUrlTextLoaded(false);
+    setAnalysis(null);
+    setLabels([]);
+    setRemoved([]);
+    setTree(null);
+    setStatus("");
+    setError(null);
+    setShowJSON(false);
+    setShowPrompts(false);
+    setCopied("");
+    setView("grid");
+    setReviewOpen(false);
+    exportRef.current = "";
+  }
 
   function copy(label, value) {
     navigator.clipboard.writeText(value).then(
