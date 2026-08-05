@@ -1,5 +1,5 @@
 import React from "react";
-import { CSS, GridTable } from "./App.jsx";
+import { CSS, GridTable, buildGrid } from "./App.jsx";
 
 /* Static fixture matching the real analyze()/structure() output shapes —
  * no live API calls, so this page renders instantly and deterministically. */
@@ -13,67 +13,13 @@ const FIXTURE_PREP = ["Heat a skillet over medium"];
 const FIXTURE_TREE = {
   op: "grill 3 min per side",
   children: [
-    { op: "butter each slice", children: [0, 1] },
+    { op: "butter each slice", id: "butter", children: [0, 1] },
     2,
   ],
 };
-
-function layoutTree(tree) {
-  const leaves = [];
-  const cells = [];
-  let nextCol = 0;
-  function walk(node) {
-    if (typeof node === "number") {
-      const row = leaves.length;
-      leaves.push(node);
-      return { start: row, end: row };
-    }
-    let start = Infinity;
-    let end = -Infinity;
-    node.children.forEach((c) => {
-      const r = walk(c);
-      start = Math.min(start, r.start);
-      end = Math.max(end, r.end);
-    });
-    cells.push({ op: node.op, row: start, rowSpan: end - start + 1, col: nextCol, colSpan: 1 });
-    nextCol += 1;
-    return { start, end };
-  }
-  walk(tree);
-  return { leaves, cells, cols: nextCol, rows: leaves.length };
-}
-
-function fillGaps(cells, rows, cols) {
-  const grid = Array.from({ length: rows }, () => new Array(cols).fill(false));
-  cells.forEach((c) => { for (let r = c.row; r < c.row + c.rowSpan; r += 1) grid[r][c.col] = true; });
-  const blanks = [];
-  for (let r = 0; r < rows; r += 1) {
-    for (let c = 0; c < cols; c += 1) {
-      if (grid[r][c]) continue;
-      let w = 0;
-      while (c + w < cols && !grid[r][c + w]) w += 1;
-      let h = 1;
-      let canGrow = true;
-      while (r + h < rows && canGrow) {
-        for (let k = 0; k < w; k += 1) if (grid[r + h][c + k]) { canGrow = false; break; }
-        if (canGrow) h += 1;
-      }
-      for (let i = 0; i < h; i += 1) for (let k = 0; k < w; k += 1) grid[r + i][c + k] = true;
-      blanks.push({ blank: true, row: r, col: c, rowSpan: h, colSpan: w });
-      c += w - 1;
-    }
-  }
-  return blanks;
-}
-
-function buildGrid(tree) {
-  const { leaves, cells, cols, rows } = layoutTree(tree);
-  const all = [...cells, ...fillGaps(cells, rows, cols)];
-  const byRow = Array.from({ length: rows }, () => []);
-  all.forEach((c) => byRow[c.row].push(c));
-  byRow.forEach((r) => r.sort((a, b) => a.col - b.col));
-  return { leaves, byRow, cols, rows };
-}
+const FIXTURE_ASIDES = [
+  { text: "Set out a butter knife", anchor: "butter" },
+];
 
 const TOKENS = [
   { name: "--ink", value: "#2A3B4D", note: "primary rules and type" },
@@ -127,7 +73,7 @@ const SG_CSS = `
 `;
 
 export default function Styleguide() {
-  const grid = buildGrid(FIXTURE_TREE);
+  const grid = buildGrid(FIXTURE_TREE, FIXTURE_ASIDES);
 
   return (
     <div className="rg graph-paper">

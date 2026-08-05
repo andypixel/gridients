@@ -225,7 +225,7 @@ const ADDITIONS_PROMPT = `You check an already-extracted recipe ingredient list 
 - New entries: "quantity" is usually "" since the amount wasn't in the original list; "src" points at the step line that mentions it; correction kind is "add".
 - Never invent something the directions don't actually mention. Keep "note"/"what"/"why" under 8 words each.`;
 
-const TERSER = "Your previous reply was cut off for length. Try again, shorter: drop \"corrections\" and \"issues\" entirely if needed, shorten every \"note\"/\"what\"/\"why\" to 3 words or fewer, and drop \"edit\" strings unless a line is genuinely broken. The full data — ingredients, steps, src line numbers — must still all be there; only the commentary shrinks.";
+const TERSER = "Your previous reply was cut off for length. Try again, shorter: drop \"corrections\", \"issues\", and \"asides\" entirely if needed, shorten every \"note\"/\"what\"/\"why\" to 3 words or fewer, and drop \"edit\" strings unless a line is genuinely broken. The full data — ingredients, steps, src line numbers, and the tree — must still all be there; only the commentary shrinks.";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -548,23 +548,28 @@ const STRUCTURE_PROMPT = `You turn an analyzed recipe into a nested preparation 
 
 {
   "prep": string[],
+  "asides": [ { "text": string, "anchor": string } ],
   "tree": Node
 }
 
-Node = an integer (index of an ingredient) | { "op": string, "children": Node[] }
+Node = an integer (index of an ingredient) | { "op": string, "id"?: string, "children": Node[] }
 
-- "prep" holds setup that involves none of the listed ingredients: preheating, greasing pans, bringing water to a boil. Under 8 words each. May be empty.
+- "prep" holds setup that involves NO listed ingredient at all: preheating, greasing pans, bringing water to a boil. Under 8 words each. May be empty.
+- "asides" holds a step involving NO listed ingredient at all that DOES have a specific moment it must be ready by: "heat the skillet while prepping the rest", "let the dough rest 10 min before shaping". "anchor" is the "id" of the op node it must be ready by. Under 8 words each. May be empty. Don't use this for setup with no particular timing — that's "prep".
+- The test for "prep"/"asides" is only ever "does this step name or touch a listed ingredient?" — never whether the recipe's own wording sounds like an aside. A step like "fry the egg, set aside" NAMES the egg, so it is never "prep" or "asides" no matter that it literally says "set aside" — it is a tree node instead (see the next rule), full stop. Never emit both a tree node and a prep/aside entry for the same action.
+- "id" on an op node is optional — set it only when an aside needs to anchor to that exact node. Omit it everywhere else.
 - Every ingredient index appears exactly once in the tree. The list has already been split so that no ingredient is used twice.
 - "op" is a terse imperative label, 1-6 words: "melt", "mix", "fold in", "simmer 1 hr", "bake 350F 30-40 min". Carry over temperature and time when the step gives them.
 - Each op node's children are exactly what is combined at that moment: ingredients entering directly, plus any sub-preparation already assembled.
 - The root op is the final action.
 - Child order sets the row order of the chart, so ingredients combined in the same step must be adjacent.
 - Merge instructions describing one physical action; split an instruction that assembles two independent sub-preparations.
-- An ingredient prepared apart and stirred in late — a roux, a slurry, a garnish — is its own subtree joined at the step where it meets the rest.`;
+- An ingredient prepared apart and stirred in late — a roux, a slurry, a garnish, a fried egg set aside for topping — is its own subtree joined at the step where it meets the rest.`;
 
-function validateTree(tree, count) {
+function validateTree(tree, count, asides) {
   const errors = [];
   const found = [];
+  const ids = new Map();
   (function walk(node, depth) {
     if (depth > 25) { errors.push("Tree is nested more than 25 levels deep."); return; }
     if (typeof node === "number") {
@@ -574,6 +579,11 @@ function validateTree(tree, count) {
     }
     if (!node || typeof node !== "object" || typeof node.op !== "string" || !node.op.trim()) {
       errors.push("A step is missing its op label."); return;
+    }
+    if (node.id !== undefined) {
+      if (typeof node.id !== "string" || !node.id.trim()) errors.push(`Step "${node.op}" has an invalid id.`);
+      else if (ids.has(node.id)) errors.push(`Id "${node.id}" is used more than once.`);
+      else ids.set(node.id, true);
     }
     if (!Array.isArray(node.children) || node.children.length === 0) {
       errors.push(`Step "${node.op}" has no inputs.`); return;
@@ -587,6 +597,16 @@ function validateTree(tree, count) {
     seen.add(i);
   });
   for (let i = 0; i < count; i += 1) if (!seen.has(i)) errors.push(`Ingredient index ${i} never appears in the tree.`);
+
+  if (asides !== undefined && !Array.isArray(asides)) {
+    errors.push(`"asides" must be an array.`);
+  } else {
+    (asides || []).forEach((a, i) => {
+      if (!a || typeof a.text !== "string" || !a.text.trim()) errors.push(`Aside #${i + 1} has no text.`);
+      if (!a || typeof a.anchor !== "string" || !a.anchor.trim()) errors.push(`Aside #${i + 1} has no anchor.`);
+      else if (!ids.has(a.anchor)) errors.push(`Aside #${i + 1} anchors to id "${a.anchor}", which is not defined in the tree.`);
+    });
+  }
   return errors;
 }
 
@@ -609,7 +629,7 @@ async function structure(ingredients, steps, onStatus) {
       continue;
     }
 
-    const errors = validateTree(parsed.tree, ingredients.length);
+    const errors = validateTree(parsed.tree, ingredients.length, parsed.asides);
     if (!errors.length) return parsed;
     if (attempt === 1) {
       const err = new Error("The tree failed validation twice.");
@@ -628,9 +648,10 @@ async function structure(ingredients, steps, onStatus) {
  * PASS 3 — pure layout, no model
  * ================================================================== */
 
-function layoutTree(tree) {
+export function layoutTree(tree) {
   const leaves = [];
   const cells = [];
+  const idToCol = new Map();
   let nextCol = 0;
   function walk(node) {
     if (typeof node === "number") {
@@ -646,14 +667,15 @@ function layoutTree(tree) {
       end = Math.max(end, r.end);
     });
     cells.push({ op: node.op, row: start, rowSpan: end - start + 1, col: nextCol, colSpan: 1 });
+    if (node.id) idToCol.set(node.id, nextCol);
     nextCol += 1;
     return { start, end };
   }
   walk(tree);
-  return { leaves, cells, cols: nextCol, rows: leaves.length };
+  return { leaves, cells, cols: nextCol, rows: leaves.length, idToCol };
 }
 
-function fillGaps(cells, rows, cols) {
+export function fillGaps(cells, rows, cols) {
   const grid = Array.from({ length: rows }, () => new Array(cols).fill(false));
   cells.forEach((c) => { for (let r = c.row; r < c.row + c.rowSpan; r += 1) grid[r][c.col] = true; });
   const blanks = [];
@@ -688,7 +710,7 @@ function fillGaps(cells, rows, cols) {
  * tree, so it's enforced here rather than relied on from the prompt:
  * nested sub-ops keep their given relative order, raw ingredients
  * move after all of them, also keeping their given relative order. */
-function orderForEntry(node) {
+export function orderForEntry(node) {
   if (typeof node === "number") return node;
   const children = node.children.map(orderForEntry);
   const subops = children.filter((c) => typeof c !== "number");
@@ -696,13 +718,17 @@ function orderForEntry(node) {
   return { ...node, children: [...subops, ...raw] };
 }
 
-function buildGrid(tree) {
-  const { leaves, cells, cols, rows } = layoutTree(orderForEntry(tree));
+export function buildGrid(tree, asides) {
+  const { leaves, cells, cols, rows, idToCol } = layoutTree(orderForEntry(tree));
   const all = [...cells, ...fillGaps(cells, rows, cols)];
   const byRow = Array.from({ length: rows }, () => []);
   all.forEach((c) => byRow[c.row].push(c));
   byRow.forEach((r) => r.sort((a, b) => a.col - b.col));
-  return { leaves, byRow, cols, rows };
+  const resolvedAsides = (asides || [])
+    .map((a) => ({ text: a.text, col: idToCol.get(a.anchor) }))
+    .filter((a) => Number.isInteger(a.col))
+    .sort((a, b) => a.col - b.col);
+  return { leaves, byRow, cols, rows, asides: resolvedAsides };
 }
 
 /* ================================================================== *
@@ -716,6 +742,12 @@ function exportHTML(grid, ingredients, prep, title) {
   const pad = "padding:5px 8px;";
   const width = grid.cols + 1;
   const rows = (prep || []).map((p) => `<tr><td colspan="${width}" style="${b}${pad}text-align:center;">${esc(p)}</td></tr>`);
+  (grid.asides || []).forEach((a) => {
+    const span = a.col + 2;
+    const fill = width - span;
+    const filler = fill > 0 ? `<td colspan="${fill}" style="${b}"></td>` : "";
+    rows.push(`<tr><td colspan="${span}" style="${b}${pad}text-align:right;font-style:italic;border-left:3px solid #C9A576;">${esc(a.text)}</td>${filler}</tr>`);
+  });
   grid.byRow.forEach((cells, r) => {
     const ing = `<td style="${b}${pad}">${esc(ingredients[grid.leaves[r]])}</td>`;
     const rest = cells.map((c) => c.blank
@@ -757,6 +789,16 @@ export function GridTable({ title, activeLabels, grid, prep }) {
             {(prep || []).map((p, i) => (
               <tr key={`p${i}`}><td className="rg-prep" colSpan={grid.cols + 1}>{p}</td></tr>
             ))}
+            {(grid.asides || []).map((a, i) => {
+              const span = a.col + 2;
+              const fill = grid.cols + 1 - span;
+              return (
+                <tr key={`a${i}`}>
+                  <td className="rg-prep rg-aside" colSpan={span}>{a.text}</td>
+                  {fill > 0 && <td className="rg-gap" colSpan={fill} />}
+                </tr>
+              );
+            })}
             {grid.byRow.map((cells, r) => (
               <tr key={r}>
                 <td className="rg-ingcell">{activeLabels[grid.leaves[r]]}</td>
@@ -805,7 +847,7 @@ export default function RecipeGridConverter() {
     [analysis, removed]
   );
   const activeLabels = active.map(({ i }) => labels[i]);
-  const grid = useMemo(() => (tree ? buildGrid(tree.tree) : null), [tree]);
+  const grid = useMemo(() => (tree ? buildGrid(tree.tree, tree.asides) : null), [tree]);
   const stale = tree && tree.count !== active.length;
   const stepTexts = useMemo(() => (analysis ? analysis.steps.map((s) => stepText(s, lines)) : []), [analysis, lines]);
   const reviewCount = analysis
@@ -1264,6 +1306,8 @@ html, body, #root { height: 100%; margin: 0; }
 .rg-ingcell { padding: 6px 9px; font-size: 14px; font-family: var(--font-serif); }
 .rg-prep { padding: 6px 9px; text-align: center; font-size: 13px; }
 .rg-gap { background: repeating-linear-gradient(135deg, transparent, transparent 7px, var(--grid) 7px, var(--grid) 8px); }
+.rg-aside { font-family: var(--font-hand); font-size: 16px; text-align: right; }
+.rg-table td.rg-aside { border-left: var(--border-width-accent) solid var(--spill); }
 .rg-op {
   padding: 6px 10px; text-align: center; vertical-align: middle;
   font-size: 11.5px; background: color-mix(in srgb, var(--spill) 20%, var(--paper)); color: var(--ink);
