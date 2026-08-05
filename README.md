@@ -9,10 +9,8 @@ CORS anywhere, and no separate Worker deploy.
 ```
 index.html            Vite entry
 src/App.jsx           the whole app (ported from the artifact, ~unchanged)
-src/LoginGate.jsx     password screen
 src/main.jsx          React root
 server/index.js       Express: routes + static + SPA fallback
-server/auth.js        shared password → signed cookie
 server/messages.js    Anthropic proxy (allowlist, clamp, backoff, daily cap)
 server/fetchPage.js   URL fetch proxy (SSRF guards)
 ```
@@ -20,19 +18,12 @@ server/fetchPage.js   URL fetch proxy (SSRF guards)
 ## Local dev
 
 ```bash
-cp .env.example .env      # fill in ANTHROPIC_API_KEY, APP_PASSWORD, SESSION_SECRET
+cp .env.example .env      # fill in ANTHROPIC_API_KEY
 npm install
 npm run dev               # API on :3000, client on :5173 (proxies /api → :3000)
 ```
 
-Generate a session secret:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-Open http://localhost:5173. Keep `COOKIE_SECURE=false` locally — dev is
-plain http, and a `Secure` cookie would never be stored.
+Open http://localhost:5173.
 
 ### Using your Claude subscription for dev instead of `ANTHROPIC_API_KEY`
 
@@ -52,12 +43,9 @@ for the value you'll paste into Railway later; it's simply unused while
    subscription.
 2. Under **Variables**, set:
    - `ANTHROPIC_API_KEY`
-   - `APP_PASSWORD`
-   - `SESSION_SECRET`
 
-   Leave `COOKIE_SECURE` unset. **Do not set `NODE_ENV=production`** —
-   Nixpacks would then skip devDependencies, vite wouldn't install, and
-   the build would fail.
+   **Do not set `NODE_ENV=production`** — Nixpacks would then skip
+   devDependencies, vite wouldn't install, and the build would fail.
 3. **Settings → Networking → Generate Domain.**
 4. Optional, and worth it here: **Settings → enable app sleeping.** At
    twice-a-week usage this drops consumption to near zero in exchange
@@ -68,9 +56,9 @@ health check at `/api/health`.
 
 ## What the server enforces
 
-- **Every `/api` route requires the session cookie.** `LoginGate` decides
-  what to render; the server decides what's permitted. Bypassing the
-  component in devtools yields a UI whose every button 401s.
+- **The URL is unlisted — there is no login gate.** Anyone with the
+  Railway domain can use the app; this is fine for a personal tool with
+  no sensitive data behind it, but don't share the URL somewhere public.
 - **The Messages payload is rebuilt server-side from an allowlist.**
   Only `system`, `messages`, and `max_tokens` cross over, and
   `max_tokens` is clamped to `MAX_OUTPUT_TOKENS`. Forwarding the client's
@@ -94,7 +82,6 @@ health check at `/api/health`.
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-6` | |
 | `MAX_OUTPUT_TOKENS` | `8000` | Server-side ceiling |
 | `DAILY_CALL_LIMIT` | `300` | Model calls per UTC day |
-| `COOKIE_SECURE` | secure on | Set `false` for local http |
 | `ANTHROPIC_AUTH_MODE` | unset (`ANTHROPIC_API_KEY`) | Set `oauth` for local dev only — never in Railway |
 
 `MAX_TOKENS` in `src/App.jsx` (currently 4000) is what the client asks

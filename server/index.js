@@ -1,9 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
-import cookieParser from "cookie-parser";
 
-import { requireAuth, isAuthed, login, logout } from "./auth.js";
 import { handleMessages } from "./messages.js";
 import { handleFetchPage } from "./fetchPage.js";
 
@@ -14,7 +12,7 @@ const dist = path.join(__dirname, "..", "dist");
  * always a misconfigured deploy, never a runtime condition.
  * ANTHROPIC_API_KEY is exempt under ANTHROPIC_AUTH_MODE=oauth (local-dev-only
  * — see server/messages.js), where the ant CLI supplies credentials instead. */
-const requiredEnvVars = ["APP_PASSWORD", "SESSION_SECRET"];
+const requiredEnvVars = [];
 if (process.env.ANTHROPIC_AUTH_MODE !== "oauth") requiredEnvVars.push("ANTHROPIC_API_KEY");
 for (const key of requiredEnvVars) {
   if (!process.env[key]) {
@@ -24,17 +22,13 @@ for (const key of requiredEnvVars) {
 }
 
 const app = express();
-app.set("trust proxy", 1); // Railway terminates TLS upstream; without this, secure cookies misbehave
+app.set("trust proxy", 1); // Railway terminates TLS upstream
 app.use(express.json({ limit: "1mb" }));
-app.use(cookieParser());
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
-app.get("/api/session", (req, res) => res.json({ authed: isAuthed(req) }));
-app.post("/api/login", login);
-app.post("/api/logout", logout);
 
-app.post("/api/messages", requireAuth, handleMessages);
-app.get("/api/fetch", requireAuth, handleFetchPage);
+app.post("/api/messages", handleMessages);
+app.get("/api/fetch", handleFetchPage);
 
 app.use(express.static(dist));
 // SPA fallback: anything not matched above and not under /api gets index.html

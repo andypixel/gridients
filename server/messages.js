@@ -2,9 +2,9 @@
  *
  * The request body is REBUILT here from an allowlist rather than
  * forwarded. Forwarding whatever the client sent would make this an
- * unmetered Anthropic account for anyone holding a session cookie —
- * they could swap in any model, any max_tokens, any tool config.
- * Only system/messages/max_tokens cross the boundary, and max_tokens
+ * unmetered Anthropic account for anyone hitting the URL — they could
+ * swap in any model, any max_tokens, any tool config. Only
+ * system/messages/max_tokens cross the boundary, and max_tokens
  * is clamped. */
 
 import { execFile } from "node:child_process";
@@ -48,7 +48,7 @@ async function oauthHeaders() {
 /* Blast-radius limit, not a fairness mechanism. In-memory and
  * per-process, so it resets on deploy and on wake from sleep —
  * which is fine for its actual job: capping the damage if the
- * session cookie ever leaks or a loop in the client runs away. */
+ * URL ever leaks or a loop in the client runs away. */
 let day = new Date().toISOString().slice(0, 10);
 let callsToday = 0;
 

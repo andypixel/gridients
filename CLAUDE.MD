@@ -5,19 +5,17 @@ grid: ingredients are rows, operations are columns, rowspan reflects how
 many ingredients a step combines, and the whole thing reads left to
 right as an assembly sequence.
 
-Personal tool. One or two users, a few conversions a week, unlisted URL
-behind a shared password. Optimize for clarity over scale — there is no
-traffic to engineer for.
+Personal tool. One or two users, a few conversions a week, unlisted URL,
+no login gate — security by obscurity is an accepted tradeoff here.
+Optimize for clarity over scale — there is no traffic to engineer for.
 
 ## Layout
 
 ```
 index.html             Vite entry — loads src/main.jsx as a module
 src/App.jsx            entire client app + pipeline (~1200 lines, single file by design)
-src/LoginGate.jsx      password screen
 src/main.jsx           React root
 server/index.js        Express: routes, static serving, SPA fallback
-server/auth.js         shared password → HMAC-signed cookie
 server/messages.js     Anthropic Messages proxy
 server/fetchPage.js    URL fetch proxy with SSRF guards
 ```
@@ -51,10 +49,9 @@ the specific errors back for one correction attempt, then throws.
 - **`server/messages.js` rebuilds the Anthropic payload from an
   allowlist.** It does not forward the client's body. Forwarding would
   make this an unmetered Anthropic account with arbitrary model choice
-  for anyone holding a session cookie. Only `system`, `messages`, and
+  for anyone hitting the URL. Only `system`, `messages`, and
   `max_tokens` cross, and `max_tokens` is clamped.
-- **Secure-cookie behavior is keyed off `COOKIE_SECURE`, never
-  `NODE_ENV`.** Setting `NODE_ENV=production` on Railway makes Nixpacks
+- **Never set `NODE_ENV=production` on Railway.** Nixpacks would then
   skip devDependencies, which removes vite and breaks the build.
 - **`server/fetchPage.js` resolves hostnames and checks resulting IPs**
   rather than string-matching the hostname, and follows redirects
@@ -92,13 +89,12 @@ rise — it remains a genuine fallback for an unusually large recipe.
 
 ## Environment
 
-Required: `ANTHROPIC_API_KEY` (unless `ANTHROPIC_AUTH_MODE=oauth`),
-`APP_PASSWORD`, `SESSION_SECRET`. The server exits at boot if any
-required var is missing — a missing key is always a misconfigured
-deploy, never a runtime condition.
+Required: `ANTHROPIC_API_KEY` (unless `ANTHROPIC_AUTH_MODE=oauth`). The
+server exits at boot if it's missing — a missing key is always a
+misconfigured deploy, never a runtime condition.
 
 Optional: `ANTHROPIC_MODEL`, `MAX_OUTPUT_TOKENS`, `DAILY_CALL_LIMIT`,
-`COOKIE_SECURE`, `PORT`, `ANTHROPIC_AUTH_MODE`.
+`PORT`, `ANTHROPIC_AUTH_MODE`.
 
 **`ANTHROPIC_AUTH_MODE=oauth` is local-dev-only.** When set,
 `server/messages.js` authenticates via the `ant` CLI

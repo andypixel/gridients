@@ -1,8 +1,8 @@
 /* gridients design tokens — single source of truth for every color, font
  * stack, border width, and radius used anywhere in the app. Defined at
- * :root (not scoped to any one component) so App.jsx, LoginGate.jsx, and
- * Styleguide.jsx can all reference the same custom properties, including
- * from inline style={} objects via "var(--token)" strings. */
+ * :root (not scoped to any one component) so App.jsx and Styleguide.jsx
+ * can both reference the same custom properties, including from inline
+ * style={} objects via "var(--token)" strings. */
 
 :root {
   /* color */
@@ -71,7 +71,7 @@
 /* -------------------------------------------------------------------- *
  * Graph paper — the literal "graph paper" background, a faint two-axis
  * grid in --grid under the --paper fill. Applied to each screen's
- * outermost container (App.jsx's .rg, LoginGate's wrapper, Styleguide).
+ * outermost container (App.jsx's .rg, Styleguide).
  * Stripped in print (see below) to save ink.
  * -------------------------------------------------------------------- */
 
