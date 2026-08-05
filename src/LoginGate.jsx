@@ -48,9 +48,10 @@ export default function LoginGate({ children }) {
   if (state === "in") return children;
 
   return (
-    <div style={S.wrap}>
+    <div className="graph-paper" style={S.wrap}>
       <div style={S.card}>
-        <h1 style={S.title}>Recipe Grid</h1>
+        <img src="/logo/mark.png" alt="" style={S.mark} />
+        <h1 style={S.title}>gridients</h1>
         <p style={S.sub}>This one's private. Password, please.</p>
         <input
           type="password"
@@ -70,11 +71,12 @@ export default function LoginGate({ children }) {
 }
 
 const S = {
-  wrap: { minHeight: "100vh", display: "grid", placeItems: "center", background: "#f7f6f1", fontFamily: "ui-sans-serif, system-ui, sans-serif" },
-  card: { width: 320, padding: 28, background: "#fff", border: "1px solid #d8d6cc" },
-  title: { margin: "0 0 4px", fontSize: 19, letterSpacing: ".02em", color: "#16181c" },
-  sub: { margin: "0 0 18px", fontSize: 13, color: "#6b6a63" },
-  input: { width: "100%", boxSizing: "border-box", padding: "9px 10px", fontSize: 14, border: "1px solid #d8d6cc", background: "#fdfdfb" },
-  button: { width: "100%", marginTop: 10, padding: "9px 10px", fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", border: "1px solid #16181c", background: "none", cursor: "pointer" },
-  error: { margin: "12px 0 0", fontSize: 12.5, color: "#a3341f" },
+  wrap: { minHeight: "100vh", display: "grid", placeItems: "center", fontFamily: "var(--font-serif)" },
+  card: { width: 320, padding: 28, background: "var(--paper)", border: "var(--border-width) solid var(--rule)", borderRadius: "var(--radius)" },
+  mark: { width: 36, height: "auto", marginBottom: 10 },
+  title: { margin: "0 0 4px", fontSize: 26, fontWeight: "normal", fontFamily: "var(--font-hand)", color: "var(--ink)" },
+  sub: { margin: "0 0 18px", fontSize: 13, color: "var(--ink-dim)" },
+  input: { width: "100%", boxSizing: "border-box", padding: "9px 10px", fontSize: 14, fontFamily: "var(--font-mono)", border: "var(--border-width) solid var(--rule)", borderRadius: "var(--radius)", background: "var(--paper)", color: "var(--ink)" },
+  button: { width: "100%", marginTop: 10, padding: "9px 10px", fontSize: 11, fontFamily: "var(--font-mono)", letterSpacing: ".1em", textTransform: "uppercase", border: 0, borderRadius: "var(--radius)", background: "var(--ink)", color: "var(--paper)", cursor: "pointer" },
+  error: { margin: "12px 0 0", fontSize: 12.5, color: "var(--correction)" },
 };

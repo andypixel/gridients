@@ -19,7 +19,23 @@
       "Bash(npm install *)",
       "Bash(curl -s -o /dev/null -w \"5174: %{http_code}\\\\n\" http://localhost:5174/)",
       "Bash(node verify.js)",
-      "Bash(tasklist)"
+      "Bash(tasklist)",
+      "Bash(mkdir -p \"C:/Users/andre/Documents/GitHub/gridients/public/fonts\" && ls \"C:/Users/andre/Documents/GitHub/gridients/public/fonts\")",
+      "Bash(curl -s -o lora-variable-check.woff2 \"https://fonts.gstatic.com/s/lora/v37/0QIvMX1D_JOuMwr7Iw.woff2\")",
+      "Bash(python -c ' *)",
+      "Read(//c/Users/andre/Downloads/**)",
+      "Bash(mv lora-variable-check.woff2 lora-variable.woff2)",
+      "Bash(curl -s -o ibm-plex-mono-400.woff2 \"https://fonts.gstatic.com/s/ibmplexmono/v20/-F63fjptAgt5VM-kVkqdyU8n1i8q1w.woff2\")",
+      "Bash(curl -s -o architects-daughter-400.woff2 \"https://fonts.gstatic.com/s/architectsdaughter/v20/KtkxAKiDZI_td1Lkx62xHZHDtgO_Y-bvTYlg4w.woff2\")",
+      "Bash(rm -f plexmono.css lora.css archdaughter.css)",
+      "Bash(cp \"C:/Users/andre/Downloads/logo.png\" \"C:/Users/andre/Documents/GitHub/gridients/public/logo/mark.png\")",
+      "Bash(cp \"C:/Users/andre/Downloads/logotype.png\" \"C:/Users/andre/Documents/GitHub/gridients/public/logo/wordmark.png\")",
+      "Bash(grep -noE '#[0-9a-fA-F]{3,6}\\\\b' src/App.jsx src/LoginGate.jsx src/Styleguide.jsx src/main.jsx)",
+      "Bash(curl -s -o /dev/null -w \"3000: %{http_code}\\\\n\" http://localhost:3000/api/health)",
+      "Bash(curl -s -o /dev/null -w \"5175: %{http_code}\\\\n\" http://localhost:5175/)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\andre\\Documents\\GitHub\\gridients\\public"
     ]
   }
 }

@@ -837,6 +837,40 @@ Melt the remaining 2 tablespoons butter with the honey and brush over the warm c
 
 const KIND_LABEL = { join: "joined", split: "split", reorder: "reordered", add: "added", drop: "dropped", normalize: "tidied" };
 
+/* The chart itself — the one deterministic, model-free render. Exported
+ * so the /styleguide route can show the exact same markup against fixture
+ * data instead of a hand-copied duplicate that could drift out of sync. */
+export function GridTable({ title, activeLabels, grid, prep }) {
+  return (
+    <>
+      <div className="rg-block">
+        <span>{title || "Untitled"}</span>
+        <span>{activeLabels.length} ingredients</span>
+        <span>{grid.cols} steps</span>
+      </div>
+
+      <div className="rg-scroll">
+        <table className="rg-table">
+          <tbody>
+            {(prep || []).map((p, i) => (
+              <tr key={`p${i}`}><td className="rg-prep" colSpan={grid.cols + 1}>{p}</td></tr>
+            ))}
+            {grid.byRow.map((cells, r) => (
+              <tr key={r}>
+                <td className="rg-ingcell">{activeLabels[grid.leaves[r]]}</td>
+                {cells.map((c, i) => c.blank
+                  ? <td key={i} className="rg-gap" rowSpan={c.rowSpan} colSpan={c.colSpan} />
+                  : <td key={i} className="rg-op" rowSpan={c.rowSpan} colSpan={c.colSpan} style={{ animationDelay: `${c.col * 55}ms` }}>{c.op}</td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 export default function RecipeGridConverter() {
   const [mode, setMode] = useState("paste");
   const [text, setText] = useState(SAMPLES["Clean paste"]);
@@ -931,18 +965,21 @@ export default function RecipeGridConverter() {
   const busy = !!status;
 
   return (
-    <div className="rg">
+    <div className="rg graph-paper">
       <style>{CSS}</style>
 
       {screen === "input" && (
         <div className="rg-input-shell">
           <header className="rg-head">
-            <span className="rg-eyebrow">Recipe → assembly diagram</span>
-            <h1>Table of Contents</h1>
-            <p className="rg-sub">
-              The whole paste is read first — ingredients checked against the directions, divided amounts separated, copy damage repaired — and only then is the chart built.
-            </p>
+            <img className="rg-mark" src="/logo/mark.png" alt="" />
+            <div className="rg-head-text">
+              <img className="rg-wordmark" src="/logo/wordmark.png" alt="gridients" />
+              <span className="rg-eyebrow">Recipe → assembly diagram</span>
+            </div>
           </header>
+          <p className="rg-sub">
+            The whole paste is read first — ingredients checked against the directions, divided amounts separated, copy damage repaired — and only then is the chart built.
+          </p>
 
           <section className="rg-panel">
             <div className="rg-tabs">
@@ -1006,6 +1043,7 @@ export default function RecipeGridConverter() {
       {screen === "result" && (
         <div className="rg-result-shell">
           <div className="rg-topbar">
+            <img className="rg-mark" src="/logo/mark.png" alt="gridients" />
             <span className="rg-topbar-title">
               {analysis ? (analysis.title || "Untitled") : busy ? "Converting…" : error ? "Couldn't convert" : ""}
             </span>
@@ -1112,32 +1150,7 @@ export default function RecipeGridConverter() {
                 {stale && <p className="rg-stale">The ingredient list changed. Redraw to rebuild the chart.</p>}
 
                 {view === "grid" && grid && !stale && (
-                  <>
-                    <div className="rg-block">
-                      <span>{analysis.title || "Untitled"}</span>
-                      <span>{active.length} ingredients</span>
-                      <span>{grid.cols} steps</span>
-                    </div>
-
-                    <div className="rg-scroll">
-                      <table className="rg-table">
-                        <tbody>
-                          {(tree.prep || []).map((p, i) => (
-                            <tr key={`p${i}`}><td className="rg-prep" colSpan={grid.cols + 1}>{p}</td></tr>
-                          ))}
-                          {grid.byRow.map((cells, r) => (
-                            <tr key={r}>
-                              <td className="rg-ingcell">{activeLabels[grid.leaves[r]]}</td>
-                              {cells.map((c, i) => c.blank
-                                ? <td key={i} className="rg-gap" rowSpan={c.rowSpan} colSpan={c.colSpan} />
-                                : <td key={i} className="rg-op" rowSpan={c.rowSpan} colSpan={c.colSpan} style={{ animationDelay: `${c.col * 55}ms` }}>{c.op}</td>
-                              )}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
+                  <GridTable title={analysis.title} activeLabels={activeLabels} grid={grid} prep={tree.prep} />
                 )}
 
                 {view === "linear" && (
@@ -1166,184 +1179,176 @@ export default function RecipeGridConverter() {
   );
 }
 
-const CSS = `
+export const CSS = `
 html, body, #root { height: 100%; margin: 0; }
 
 .rg {
-  --ink: #16181c;
-  --paper: #e7eae1;
-  --panel: #f7f8f3;
-  --rule: #a8ad9c;
-  --pen: #22439b;
-  --pen-tint: #dde4f3;
-  --dim: #6a705f;
-  --flag: #9a4b12;
-  --flag-tint: #f2e5d6;
-  background: var(--paper); color: var(--ink);
-  font: 15px/1.5 "Helvetica Neue", Arial, sans-serif;
+  color: var(--ink);
+  font: 15px/1.5 var(--font-serif);
   height: 100%;
 }
 .rg *, .rg *::before, .rg *::after { box-sizing: border-box; }
-.rg button:focus-visible, .rg textarea:focus-visible, .rg input:focus-visible { outline: 2px solid var(--pen); outline-offset: 1px; }
+.rg button:focus-visible, .rg textarea:focus-visible, .rg input:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
 
 .rg-eyebrow, .rg-label, .rg-count, .rg-block, .rg-op, .rg-actions button,
 .rg-go, .rg-samples button, .rg-tag, .rg-ings button,
-.rg-topbar-title, .rg-viewtab, .rg-review-toggle, .rg-newrecipe {
-  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+.rg-topbar-title, .rg-viewtab, .rg-review-toggle, .rg-newrecipe,
+.rg-tab, .rg-urlinput, .rg-fetch, .rg-textarea, .rg-original, .rg-pre, .rg-linear h3, .rg-prep {
+  font-family: var(--font-mono);
 }
 
 .rg-input-shell { max-width: 640px; margin: 0 auto; padding: 28px 24px 40px; }
 
-.rg-head { max-width: 66ch; margin-bottom: 26px; }
-.rg-eyebrow { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--pen); }
-.rg-head h1 { font-size: 30px; letter-spacing: -.02em; margin: 6px 0 8px; font-weight: 700; }
-.rg-sub { margin: 0; color: var(--dim); font-size: 14px; }
+.rg-head { max-width: 66ch; margin-bottom: 26px; display: flex; align-items: center; gap: 14px; }
+.rg-head .rg-mark { width: 46px; height: auto; flex-shrink: 0; }
+.rg-head .rg-wordmark { height: 28px; width: auto; }
+.rg-head-text { display: flex; flex-direction: column; }
+.rg-eyebrow { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-dim); }
+.rg-sub { margin: 10px 0 0; color: var(--ink-dim); font-size: 14px; max-width: 66ch; }
 
-.rg-panel { background: var(--panel); border: 1px solid var(--rule); padding: 16px; }
-.rg-label { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
-.rg-hint { font-size: 12px; color: var(--dim); margin: 4px 0 0; }
+.rg-panel { background: var(--paper); border: var(--border-width) solid var(--rule); padding: 16px; }
+.rg-label { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-dim); }
+.rg-hint { font-size: 12px; color: var(--ink-dim); margin: 4px 0 0; }
 .rg-bar { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-top: 20px; }
 .rg-bar:first-child { margin-top: 0; }
-.rg-count { font-size: 11px; color: var(--pen); }
+.rg-count { font-size: 11px; color: var(--ink); }
 
 .rg-samples { display: flex; gap: 5px; flex-wrap: wrap; }
-.rg-samples button { background: none; border: 1px solid var(--rule); color: var(--dim); font-size: 10px; padding: 3px 7px; cursor: pointer; }
-.rg-samples button:hover { border-color: var(--pen); color: var(--pen); }
+.rg-samples button { background: none; border: var(--border-width) solid var(--rule); color: var(--ink-dim); font-size: 10px; padding: 3px 7px; cursor: pointer; border-radius: var(--radius); }
 
-.rg-tabs { display: flex; gap: 0; margin-bottom: 16px; border-bottom: 1px solid var(--rule); }
+.rg-tabs { display: flex; gap: 0; margin-bottom: 16px; border-bottom: var(--border-width) solid var(--rule); }
 .rg-tab {
   background: none; border: 0; padding: 8px 4px; margin-right: 18px;
-  font: 11px ui-monospace, Menlo, Consolas, monospace; letter-spacing: .08em; text-transform: uppercase;
-  color: var(--dim); cursor: pointer; border-bottom: 2px solid transparent; position: relative; bottom: -1px;
+  font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--ink-dim); cursor: pointer; border-bottom: 2px solid transparent; position: relative; bottom: -1px;
 }
-.rg-tab:hover { color: var(--ink); }
-.rg-tab-active { color: var(--pen); border-bottom-color: var(--pen); }
+.rg-tab-active { color: var(--ink); border-bottom-color: var(--ink); }
 
 .rg-urlrow { display: flex; gap: 7px; }
 .rg-urlinput {
-  flex: 1; min-width: 0; padding: 9px 10px; border: 1px solid var(--rule); background: #fff; color: var(--ink);
-  font: 13px ui-monospace, Menlo, Consolas, monospace;
+  flex: 1; min-width: 0; padding: 9px 10px; border: var(--border-width) solid var(--rule); background: var(--paper); color: var(--ink);
+  font-size: 13px; border-radius: var(--radius);
 }
 .rg-fetch {
-  padding: 9px 14px; background: var(--pen); color: #fff; border: 0;
+  padding: 9px 14px; background: var(--ink); color: var(--paper); border: 0; border-radius: var(--radius);
   font-size: 11px; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; white-space: nowrap;
 }
 .rg-fetch:disabled { background: var(--rule); cursor: not-allowed; }
-.rg-urlerror { font-size: 12.5px; color: #a32020; margin: 8px 0 0; }
-.rg-fetched { font-size: 12px; color: var(--dim); margin: 9px 0 0; }
-.rg-fetched strong { color: var(--pen); font-weight: 600; }
+.rg-urlerror { font-size: 12.5px; color: var(--correction); margin: 8px 0 0; }
+.rg-fetched { font-size: 12px; color: var(--ink-dim); margin: 9px 0 0; }
+.rg-fetched strong { color: var(--ink); font-weight: 600; }
 
 .rg-textarea {
   width: 100%; height: 165px; margin-top: 7px; padding: 10px;
-  border: 1px solid var(--rule); background: #fff; color: var(--ink);
-  font: 13px/1.55 ui-monospace, Menlo, Consolas, monospace; resize: vertical;
+  border: var(--border-width) solid var(--rule); background: var(--paper); color: var(--ink); border-radius: var(--radius);
+  font-size: 13px; line-height: 1.55; resize: vertical;
 }
 
 .rg-go {
-  width: 100%; margin-top: 14px; padding: 11px; background: var(--pen); color: #fff; border: 0;
-  font-size: 12px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer;
+  width: 100%; margin-top: 14px; padding: 11px; background: var(--ink); color: var(--paper); border: 0; border-radius: var(--radius);
+  font-size: 12px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; font-family: var(--font-mono);
 }
 .rg-go:disabled { background: var(--rule); cursor: not-allowed; }
-.rg-redraw { background: var(--flag); }
+.rg-redraw { background: var(--correction); }
 
-.rg-ings { list-style: none; margin: 9px 0 0; padding: 0; max-height: 300px; overflow-y: auto; border: 1px solid var(--rule); background: #fff; }
-.rg-ings li { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid #eceee6; padding-right: 2px; }
-.rg-ings input { flex: 1; min-width: 0; border: 0; background: none; padding: 6px 8px; font: inherit; font-size: 12.5px; color: inherit; }
+.rg-ings { list-style: none; margin: 9px 0 0; padding: 0; max-height: 300px; overflow-y: auto; border: var(--border-width) solid var(--rule); background: var(--paper); }
+.rg-ings li { display: flex; align-items: center; gap: 4px; border-bottom: var(--border-width) solid var(--grid); padding-right: 2px; }
+.rg-ings input { flex: 1; min-width: 0; border: 0; background: none; padding: 6px 8px; font-family: var(--font-serif); font-size: 13px; color: inherit; }
 .rg-ings input:disabled { color: var(--rule); text-decoration: line-through; }
 .rg-ings button { border: 0; background: none; color: var(--rule); cursor: pointer; font-size: 13px; padding: 0 6px; }
-.rg-ings button:hover { color: var(--flag); }
 .rg-gone input { text-decoration: line-through; }
 
 .rg-tags { display: flex; gap: 3px; flex-shrink: 0; }
-.rg-tag { font-size: 8.5px; letter-spacing: .07em; text-transform: uppercase; font-style: normal; padding: 2px 5px; background: var(--pen-tint); color: var(--pen); white-space: nowrap; }
-.rg-tag-split { background: var(--flag-tint); color: var(--flag); }
-.rg-tag-warn { background: #f3d9d9; color: #8a2020; }
-.rg-kind-split, .rg-kind-add, .rg-kind-drop { background: var(--flag-tint); color: var(--flag); }
+.rg-tag { font-size: 8.5px; letter-spacing: .07em; text-transform: uppercase; font-style: normal; padding: 2px 5px; background: color-mix(in srgb, var(--spill) 25%, var(--paper)); color: var(--ink); white-space: nowrap; border-radius: var(--radius); }
+.rg-tag-split { background: color-mix(in srgb, var(--spill) 50%, var(--paper)); color: var(--ink); }
+.rg-tag-warn { background: var(--correction); color: var(--paper); }
+.rg-kind-join, .rg-kind-split, .rg-kind-reorder, .rg-kind-add, .rg-kind-drop, .rg-kind-normalize {
+  background: color-mix(in srgb, var(--spill) 25%, var(--paper)); color: var(--ink);
+}
 
 .rg-result-shell { height: 100dvh; display: flex; flex-direction: column; }
 
 .rg-topbar {
   display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-  padding: 14px 20px; border-bottom: 1px solid var(--rule); background: var(--panel); flex-shrink: 0;
+  padding: 14px 20px; border-bottom: var(--border-width) solid var(--rule); background: var(--paper); flex-shrink: 0;
 }
-.rg-topbar-title { font-size: 12px; color: var(--dim); letter-spacing: .04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rg-topbar .rg-mark { width: 22px; height: auto; flex-shrink: 0; }
+.rg-topbar-title { font-size: 12px; color: var(--ink-dim); letter-spacing: .04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .rg-viewtabs { display: flex; gap: 6px; }
 .rg-viewtab {
-  background: none; border: 1px solid var(--rule); padding: 8px 16px;
-  font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); cursor: pointer;
+  background: none; border: var(--border-width) solid var(--rule); padding: 8px 16px; border-radius: var(--radius);
+  font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-dim); cursor: pointer;
 }
-.rg-viewtab:hover { border-color: var(--pen); color: var(--pen); }
-.rg-viewtab-active { background: var(--pen); border-color: var(--pen); color: #fff; }
+.rg-viewtab-active { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 
 .rg-review-toggle {
   display: flex; align-items: center; gap: 6px;
-  background: none; border: 1px solid var(--rule); padding: 7px 12px;
+  background: none; border: var(--border-width) solid var(--rule); padding: 7px 12px; border-radius: var(--radius);
   font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink); cursor: pointer;
 }
-.rg-review-toggle:hover { border-color: var(--pen); color: var(--pen); }
 
 .rg-newrecipe {
-  margin-left: auto; background: none; border: 0; color: var(--dim);
+  margin-left: auto; background: none; border: 0; color: var(--ink-dim);
   font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; padding: 7px 4px;
 }
-.rg-newrecipe:hover { color: var(--pen); }
 
 .rg-content { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 24px; }
 
-.rg-busy { display: flex; align-items: center; justify-content: center; min-height: 50vh; color: var(--dim); font-size: 15px; }
+.rg-busy { display: flex; align-items: center; justify-content: center; min-height: 50vh; color: var(--ink-dim); font: 20px var(--font-hand); }
 .rg-busy p { margin: 0; }
-.rg-error { border-left: 3px solid #a32020; padding: 10px 0 10px 12px; margin-bottom: 16px; }
-.rg-error ul { margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: var(--dim); }
+.rg-error { border-left: var(--border-width-accent) solid var(--correction); padding: 10px 0 10px 12px; margin-bottom: 16px; }
+.rg-error strong { display: block; margin-bottom: 4px; font: 20px var(--font-hand); font-weight: normal; color: var(--correction); }
+.rg-error ul { margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: var(--ink-dim); }
 
-.rg-review { background: var(--panel); border: 1px solid var(--rule); padding: 16px; margin-bottom: 18px; }
-.rg-review-dev { border-top: 1px solid var(--rule); margin-top: 16px; padding-top: 12px; }
+.rg-review { background: var(--paper); border: var(--border-width) solid var(--rule); padding: 16px; margin-bottom: 18px; }
+.rg-review-dev { border-top: var(--border-width) solid var(--rule); margin-top: 16px; padding-top: 12px; }
 
 .rg-linear { max-width: 70ch; }
-.rg-linear h2 { font-size: 22px; letter-spacing: -.01em; margin: 0 0 14px; }
-.rg-linear h3 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); margin: 18px 0 8px; }
+.rg-linear h2 { font: 26px var(--font-hand); font-weight: normal; margin: 0 0 14px; color: var(--ink); }
+.rg-linear h3 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-dim); margin: 18px 0 8px; }
 .rg-linear h3:first-of-type { margin-top: 0; }
 .rg-linear ul, .rg-linear ol { margin: 0; padding-left: 22px; font-size: 14px; line-height: 1.6; }
 
 .rg-original {
-  max-width: 70ch; font: 13px/1.6 ui-monospace, Menlo, Consolas, monospace;
+  max-width: 70ch; font-size: 13px; line-height: 1.6;
   white-space: pre-wrap; word-break: break-word;
-  background: #fff; border: 1px solid var(--rule); padding: 14px 16px; margin: 0;
+  background: var(--paper); border: var(--border-width) solid var(--rule); padding: 14px 16px; margin: 0;
 }
 
 .rg-notes { margin-bottom: 16px; }
 .rg-notes ul { list-style: none; margin: 7px 0 0; padding: 0; }
-.rg-notes li { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; padding: 3px 0; border-bottom: 1px solid #e3e5dc; }
+.rg-notes li { display: flex; gap: 8px; align-items: baseline; font-size: 13px; padding: 4px 0; border-bottom: var(--border-width) solid var(--grid); }
 .rg-notes li:last-child { border-bottom: 0; }
 .rg-notes strong { font-weight: 600; }
-.rg-flagged li { color: var(--flag); }
+.rg-flagged li { color: var(--correction); }
 
-.rg-stale { font-size: 12.5px; color: var(--flag); margin: 0 0 14px; }
+.rg-stale { font-size: 12.5px; color: var(--correction); margin: 0 0 14px; }
 
-.rg-block { display: flex; flex-wrap: wrap; border: 1px solid var(--ink); border-bottom: 0; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
-.rg-block span { padding: 6px 10px; border-right: 1px solid var(--ink); }
-.rg-block span:first-child { color: var(--pen); font-weight: 700; letter-spacing: .06em; }
+.rg-block { display: flex; flex-wrap: wrap; border: var(--border-width) solid var(--rule); border-bottom: 0; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+.rg-block span { padding: 6px 10px; border-right: var(--border-width) solid var(--rule); }
+.rg-block span:first-child { color: var(--ink); font-weight: 700; letter-spacing: .06em; }
 .rg-block span:last-child { border-right: 0; }
 
 .rg-scroll { overflow-x: auto; }
-.rg-table { border-collapse: collapse; background: #fff; width: 100%; }
-.rg-table td { border: 1px solid var(--ink); }
-.rg-ingcell { padding: 6px 9px; font-size: 13.5px; }
+.rg-table { border-collapse: collapse; background: var(--paper); width: 100%; }
+.rg-table td { border: var(--border-width) solid var(--rule); }
+.rg-ingcell { padding: 6px 9px; font-size: 14px; font-family: var(--font-serif); }
 .rg-prep { padding: 6px 9px; text-align: center; font-size: 13px; }
-.rg-gap { background: repeating-linear-gradient(135deg, transparent, transparent 7px, #f2f3ee 7px, #f2f3ee 8px); }
+.rg-gap { background: repeating-linear-gradient(135deg, transparent, transparent 7px, var(--grid) 7px, var(--grid) 8px); }
 .rg-op {
   padding: 6px 10px; text-align: center; vertical-align: middle;
-  font-size: 11.5px; background: var(--pen-tint); color: var(--pen);
+  font-size: 11.5px; background: color-mix(in srgb, var(--spill) 20%, var(--paper)); color: var(--ink);
   animation: rg-in .34s ease-out backwards;
 }
+.rg-ingcell:hover, .rg-op:hover { background: var(--grid); }
 @keyframes rg-in { from { opacity: 0; transform: translateX(-7px); } }
 @media (prefers-reduced-motion: reduce) { .rg-op { animation: none; } }
 
 .rg-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-.rg-actions button { background: none; border: 1px solid var(--rule); padding: 6px 11px; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; color: var(--ink); }
-.rg-actions button:hover { border-color: var(--pen); color: var(--pen); }
+.rg-actions button { background: none; border: var(--border-width) solid var(--rule); padding: 6px 11px; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; cursor: pointer; color: var(--ink); border-radius: var(--radius); }
 
-.rg-pre { margin: 12px 0 0; padding: 11px; background: #fff; border: 1px solid var(--rule); font: 11.5px/1.5 ui-monospace, Menlo, Consolas, monospace; max-height: 320px; overflow: auto; white-space: pre-wrap; }
+.rg-pre { margin: 12px 0 0; padding: 11px; background: var(--paper); border: var(--border-width) solid var(--rule); font-size: 11.5px; line-height: 1.5; max-height: 320px; overflow: auto; white-space: pre-wrap; }
 
 @media (max-width: 899px) {
   .rg-topbar { padding: 10px 14px; }

@@ -1,0 +1,110 @@
+/* gridients design tokens — single source of truth for every color, font
+ * stack, border width, and radius used anywhere in the app. Defined at
+ * :root (not scoped to any one component) so App.jsx, LoginGate.jsx, and
+ * Styleguide.jsx can all reference the same custom properties, including
+ * from inline style={} objects via "var(--token)" strings. */
+
+:root {
+  /* color */
+  --ink: #2A3B4D;        /* primary rules and type */
+  --rule: #7E96AE;       /* secondary strokes, dividers */
+  --grid: #C6D6E4;       /* graph paper lines */
+  --paper: #F4EDDD;      /* background */
+  --spill: #C9A576;      /* accent fill, merged-cell tint */
+  --correction: #B4483C; /* annotations and errors ONLY, used sparingly */
+
+  /* --ink-dim is not a 7th brand color — it's --ink computed at reduced
+   * strength for secondary/hint text, kept here so it's derived once
+   * instead of repeating the color-mix() formula in every component. */
+  --ink-dim: color-mix(in srgb, var(--ink) 62%, var(--paper));
+
+  /* type */
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+  --font-serif: 'Lora', Georgia, 'Times New Roman', serif;
+  --font-hand: 'Architects Daughter', cursive;
+
+  /* structure */
+  --border-width: 1px;
+  --border-width-accent: 3px; /* the red-pencil-note left border on errors */
+  --radius: 0; /* deliberate: ruler-drawn, no rounded corners anywhere */
+}
+
+/* -------------------------------------------------------------------- *
+ * Self-hosted fonts. Files fetched once from Google's OFL-licensed
+ * sources and committed to public/fonts/ — the shipped app makes no
+ * requests to any Google domain. Latin subset only (the app is
+ * English-only content).
+ * -------------------------------------------------------------------- */
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/lora-variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/lora-variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Architects Daughter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/architects-daughter-400.woff2') format('woff2');
+}
+
+/* -------------------------------------------------------------------- *
+ * Graph paper — the literal "graph paper" background, a faint two-axis
+ * grid in --grid under the --paper fill. Applied to each screen's
+ * outermost container (App.jsx's .rg, LoginGate's wrapper, Styleguide).
+ * Stripped in print (see below) to save ink.
+ * -------------------------------------------------------------------- */
+
+.graph-paper {
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* -------------------------------------------------------------------- *
+ * Print — the chart has to print cleanly on both Letter and A4. No
+ * fixed widths anywhere here; the browser's print dialog picks the
+ * physical page, this just keeps the layout fluid enough to reflow onto
+ * either one.
+ * -------------------------------------------------------------------- */
+
+@media print {
+  .graph-paper { background-image: none; background-color: #fff; }
+
+  .rg-topbar, .rg-review, .rg-actions, .rg-input-shell .rg-head + .rg-panel .rg-tabs {
+    display: none !important;
+  }
+
+  .rg-content { padding: 0; overflow: visible; }
+  .rg-scroll { overflow: visible; }
+
+  .rg-table { break-inside: auto; }
+  .rg-table tr { break-inside: avoid; page-break-inside: avoid; }
+
+  .rg-op, .rg-gap {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
