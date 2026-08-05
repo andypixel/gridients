@@ -133,11 +133,6 @@ async function fetchRecipeFromUrl(rawUrl) {
   } catch {
     throw new Error("Couldn't reach the server to fetch that page. Check your connection and try again, or paste the recipe text instead.");
   }
-  if (res.status === 401) {
-    const err = new Error("Your session expired. Reload the page and sign in again.");
-    err.authRequired = true;
-    throw err;
-  }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error(detail || `That page couldn't be fetched (${res.status}). Check the URL, or paste the recipe text instead.`);
@@ -249,11 +244,6 @@ async function callModel(system, messages, retriesLeft = 3) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ max_tokens: MAX_TOKENS, system, messages }),
   });
-  if (res.status === 401) {
-    const err = new Error("Your session expired. Reload the page and sign in again.");
-    err.authRequired = true;
-    throw err;
-  }
   if (res.status === 429 && retriesLeft > 0) {
     await sleep(1200 * (4 - retriesLeft) + 600); // 1.8s, 3s, 4.2s
     return callModel(system, messages, retriesLeft - 1);
@@ -878,6 +868,7 @@ export default function RecipeGridConverter() {
   const [urlFetching, setUrlFetching] = useState(false);
   const [urlError, setUrlError] = useState(null);
   const [fetchedFrom, setFetchedFrom] = useState(null);
+  const [urlTextLoaded, setUrlTextLoaded] = useState(false);
   const [analysis, setAnalysis] = useState(null);
   const [labels, setLabels] = useState([]);
   const [removed, setRemoved] = useState([]);
@@ -918,6 +909,7 @@ export default function RecipeGridConverter() {
       const { text: fetched, method } = await fetchRecipeFromUrl(urlInput.trim());
       setText(fetched);
       setFetchedFrom({ url: urlInput.trim(), method });
+      setUrlTextLoaded(true);
     } catch (e) {
       setUrlError(e.message);
     } finally {
@@ -1024,16 +1016,17 @@ export default function RecipeGridConverter() {
               </p>
             )}
 
-            <textarea
-              id="rg-src"
-              className="rg-textarea"
-              value={text}
-              onChange={(e) => { setText(e.target.value); setFetchedFrom(null); }}
-              spellCheck={false}
-              placeholder={mode === "url" ? "Fetched text will appear here for review — you can still edit it." : undefined}
-            />
+            {(mode === "paste" || urlTextLoaded) && (
+              <textarea
+                id="rg-src"
+                className="rg-textarea"
+                value={text}
+                onChange={(e) => { setText(e.target.value); setFetchedFrom(null); }}
+                spellCheck={false}
+              />
+            )}
 
-            <button className="rg-go" onClick={run} disabled={busy || lines.length < 4}>
+            <button className="rg-go" onClick={run} disabled={busy || lines.length < 4 || (mode === "url" && !urlTextLoaded)}>
               {busy ? `${status}…` : analysis ? "Start over" : "Convert recipe"}
             </button>
           </section>
