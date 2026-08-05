@@ -1,4 +1,4 @@
-# recipe-grid
+# gridients
 
 Recipe text → Cooking for Engineers–style assembly grid.
 
