@@ -1207,12 +1207,18 @@ html, body, #root { height: 100%; margin: 0; }
   font-family: var(--font-mono);
 }
 
-.rg-input-shell { max-width: 640px; margin: 0 auto; padding: 28px 24px 40px; }
+.rg-input-shell { max-width: 720px; margin: 0 auto; padding: 28px 24px 40px; }
 
-.rg-head { max-width: 66ch; margin-bottom: 26px; display: flex; align-items: center; gap: 14px; }
-.rg-head .rg-mark { width: 46px; height: auto; flex-shrink: 0; }
-.rg-head .rg-wordmark { height: 28px; width: auto; }
-.rg-head-text { display: flex; flex-direction: column; }
+.rg-head {
+  /* sized independently — the wordmark is the dominant element here, not
+     pinned to the mark's (much smaller, near-square) icon size */
+  --wordmark-h: 120px;
+  --mark-h: 68px;
+  max-width: 100%; margin-bottom: 26px; display: flex; align-items: center; gap: 18px;
+}
+.rg-head .rg-mark { height: var(--mark-h); width: auto; flex-shrink: 0; }
+.rg-head .rg-wordmark { height: var(--wordmark-h); width: auto; max-width: 100%; }
+.rg-head-text { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
 .rg-eyebrow { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-dim); }
 .rg-sub { margin: 10px 0 20px; color: var(--ink); font-size: 16px; font-weight: 300; max-width: 66ch; }
 
@@ -1373,12 +1379,14 @@ html, body, #root { height: 100%; margin: 0; }
 .rg-pre { margin: 12px 0 0; padding: 11px; background: var(--paper); border: var(--border-width) solid var(--rule); font-size: 11.5px; line-height: 1.5; max-height: 320px; overflow: auto; white-space: pre-wrap; }
 
 @media (max-width: 899px) {
+  .rg-head { --wordmark-h: 84px; --mark-h: 48px; }
   .rg-topbar { padding: 10px 14px; }
   .rg-content { padding: 14px 16px; }
   .rg-viewtab, .rg-review-toggle, .rg-print, .rg-newrecipe { min-height: 44px; }
 }
 
 @media (max-width: 599px) {
+  .rg-head { --wordmark-h: 54px; --mark-h: 32px; gap: 10px; }
   .rg-input-shell { padding: 20px 16px 32px; }
   .rg-topbar { flex-direction: column; align-items: stretch; gap: 8px; }
   .rg-topbar-title { order: 1; text-align: center; white-space: normal; }
