@@ -604,36 +604,31 @@ Node = an integer (index of an ingredient) | { "op": string, "id"?: string, "chi
 - Merge instructions describing one physical action; split an instruction that assembles two independent sub-preparations.
 - An ingredient prepared apart and stirred in late — a roux, a slurry, a garnish, a fried egg set aside for topping — is its own subtree joined at the step where it meets the rest.`;
 
-/* usedInByIndex[i] is ingredient i's list of original-recipe step numbers
- * (from Pass 1), same index space as `count`. When given, this also
- * checks that sibling sub-preparations are ordered left to right by
- * which one's ingredients are first referenced in the directions — a
- * deterministic stand-in for "which branch has to start earliest,"
- * since column order follows child order (see STRUCTURE_PROMPT) and
- * nothing else here can check that a model got that ordering right. */
-function validateTree(tree, count, asides, usedInByIndex) {
+/* Deliberately does NOT check sibling sub-preparation ordering against
+ * usedIn step numbers — an earlier version did, and it hard-failed valid
+ * recipes: two independent branches that only merge at the end (coat the
+ * chicken; separately season the potatoes; combine) have no real ordering
+ * requirement between them even though the text happens to mention one
+ * first. "Mentioned earlier" is only a meaningful signal when there's an
+ * actual elapsed-time dependency (an 8-hour refrigeration), and there's
+ * no reliable way to tell those apart from step numbers alone. That
+ * distinction is left to STRUCTURE_PROMPT's judgment, not enforced here —
+ * getting it wrong should read as a debatable column order, never as a
+ * hard failure. */
+function validateTree(tree, count, asides) {
   const errors = [];
   const found = [];
   const ids = new Map();
-  const checkOrder = Array.isArray(usedInByIndex);
-
-  function earliestUse(index) {
-    const u = usedInByIndex && usedInByIndex[index];
-    return Array.isArray(u) && u.length ? Math.min(...u) : Infinity;
-  }
 
   function walk(node, depth) {
-    if (depth > 25) { errors.push("Tree is nested more than 25 levels deep."); return Infinity; }
+    if (depth > 25) { errors.push("Tree is nested more than 25 levels deep."); return; }
     if (typeof node === "number") {
-      if (!Number.isInteger(node) || node < 0 || node >= count) {
-        errors.push(`Ingredient index ${node} is out of range (0-${count - 1}).`);
-        return Infinity;
-      }
-      found.push(node);
-      return earliestUse(node);
+      if (!Number.isInteger(node) || node < 0 || node >= count) errors.push(`Ingredient index ${node} is out of range (0-${count - 1}).`);
+      else found.push(node);
+      return;
     }
     if (!node || typeof node !== "object" || typeof node.op !== "string" || !node.op.trim()) {
-      errors.push("A step is missing its op label."); return Infinity;
+      errors.push("A step is missing its op label."); return;
     }
     if (node.id !== undefined) {
       if (typeof node.id !== "string" || !node.id.trim()) errors.push(`Step "${node.op}" has an invalid id.`);
@@ -641,23 +636,9 @@ function validateTree(tree, count, asides, usedInByIndex) {
       else ids.set(node.id, true);
     }
     if (!Array.isArray(node.children) || node.children.length === 0) {
-      errors.push(`Step "${node.op}" has no inputs.`); return Infinity;
+      errors.push(`Step "${node.op}" has no inputs.`); return;
     }
-
-    let ownEarliest = Infinity;
-    let latestSoFar = -Infinity;
-    node.children.forEach((c) => {
-      const childEarliest = walk(c, depth + 1);
-      ownEarliest = Math.min(ownEarliest, childEarliest);
-      if (checkOrder && typeof c !== "number") {
-        if (childEarliest < latestSoFar) {
-          errors.push(`Step "${c.op}" (earliest use: step ${childEarliest}) is listed after a sibling sub-preparation used later (step ${latestSoFar}) under "${node.op}" — order sibling sub-preparations left to right by when their ingredients are first used in the directions.`);
-        } else {
-          latestSoFar = Math.max(latestSoFar, childEarliest);
-        }
-      }
-    });
-    return ownEarliest;
+    node.children.forEach((c) => walk(c, depth + 1));
   }
   walk(tree, 0);
 
@@ -680,7 +661,7 @@ function validateTree(tree, count, asides, usedInByIndex) {
   return errors;
 }
 
-async function structure(ingredients, steps, usedInByIndex, onStatus) {
+async function structure(ingredients, steps, onStatus) {
   const messages = [{
     role: "user",
     content: `Ingredients (use these indices):\n${ingredients.map((l, i) => `${i}. ${l}`).join("\n")}\n\nSteps:\n${steps.map((s, i) => `${i + 1}. ${s}`).join("\n")}`,
@@ -699,7 +680,7 @@ async function structure(ingredients, steps, usedInByIndex, onStatus) {
       continue;
     }
 
-    const errors = validateTree(parsed.tree, ingredients.length, parsed.asides, usedInByIndex);
+    const errors = validateTree(parsed.tree, ingredients.length, parsed.asides);
     if (!errors.length) return parsed;
     if (attempt === 1) {
       const err = new Error("The tree failed validation twice.");
@@ -960,9 +941,8 @@ export default function RecipeGridConverter() {
       const composed = a.ingredients.map(composeIngredient);
       setAnalysis(a); setLabels(composed); setRemoved([]);
       const steps = a.steps.map((s) => stepText(s, lines));
-      const usedInByIndex = a.ingredients.map((ing) => ing.usedIn);
       stage = "structure";
-      const t = await structure(composed, steps, usedInByIndex, setStatus);
+      const t = await structure(composed, steps, setStatus);
       setTree({ ...t, count: composed.length });
       track("convert", { mode: convertMode, outcome: "success" });
     } catch (e) {
@@ -975,8 +955,7 @@ export default function RecipeGridConverter() {
     setError(null); setStatus("Working out the structure");
     try {
       const steps = analysis.steps.map((s) => stepText(s, lines));
-      const usedInByIndex = active.map(({ ing }) => ing.usedIn);
-      const t = await structure(activeLabels, steps, usedInByIndex, setStatus);
+      const t = await structure(activeLabels, steps, setStatus);
       setTree({ ...t, count: activeLabels.length });
     } catch (e) {
       setError({ message: e.message, details: e.details });
