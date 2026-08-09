@@ -18,6 +18,7 @@ src/main.jsx           React root
 server/index.js        Express: routes, static serving, SPA fallback
 server/messages.js     Anthropic Messages proxy
 server/fetchPage.js    URL fetch proxy with SSRF guards
+server/activity.js     Usage logging (counts/outcomes only) — see Logging below
 ```
 
 Frontend and API are the same origin — Express serves `dist/` and
@@ -70,6 +71,38 @@ the specific errors back for one correction attempt, then throws.
 - **The layout renderer stays deterministic.** No model calls below
   `layoutTree`.
 
+## Logging
+
+Rudimentary usage/outcome tracking, not analytics: landing page hits,
+URL-fetch success/failure, and conversion success/failure by input mode
+(URL vs. paste) with a coarse failure stage and kind. **Never recipe
+content** — `src/App.jsx`'s `classifyError` sorts thrown errors into a
+kind by matching fixed substrings baked into the pipeline's own error
+messages, never by forwarding the message itself, since verification
+errors can quote ingredient/step text.
+
+- Client calls `POST /api/track` (fire-and-forget, see `track()` in
+  `src/App.jsx`) after a URL fetch and after a full conversion.
+  `server/index.js` validates the body against a small allowlist before
+  logging — same rationale as the Anthropic payload allowlist above.
+- The landing page hit itself is logged server-side, in `GET /`
+  (registered ahead of `express.static`, which otherwise serves
+  `dist/index.html` for `/` on its own before any handler after it
+  runs) — not by the client, so one less thing that can fail to fire.
+- `server/activity.js` appends one JSON line per event to
+  `data/activity.log` (gitignored, local disk — **resets on every
+  Railway redeploy**, no volume is configured) and also `console.log`s
+  it, so `railway logs` shows activity without needing the stats page.
+- **Local/dev sessions are dropped, not logged as a separate category.**
+  `isLocalIp` filters loopback addresses (`npm run dev`'s vite proxy and
+  `npm start` hit from the same machine both arrive as `127.0.0.1`/`::1`).
+  Everything that reaches the log is a real visitor.
+- `GET /api/stats?key=...` renders a plain-HTML summary (counts,
+  failure breakdowns, and a by-IP table — the mechanism for telling your
+  own usage apart from a friend's). Gated by `STATS_KEY`; both a missing
+  key and a wrong one return a bare 404, since the summary includes
+  visitor IPs.
+
 ## Token budget — known open item
 
 `INGREDIENT_LINES_PER_CALL = 12` and `SINGLE_CALL_CEILING = 16` exist
@@ -94,7 +127,8 @@ server exits at boot if it's missing — a missing key is always a
 misconfigured deploy, never a runtime condition.
 
 Optional: `ANTHROPIC_MODEL`, `MAX_OUTPUT_TOKENS`, `DAILY_CALL_LIMIT`,
-`PORT`, `ANTHROPIC_AUTH_MODE`.
+`PORT`, `ANTHROPIC_AUTH_MODE`, `STATS_KEY` (see Logging below — leave
+unset to keep `/api/stats` disabled).
 
 **`ANTHROPIC_AUTH_MODE=oauth` is local-dev-only.** When set,
 `server/messages.js` authenticates via the `ant` CLI
@@ -109,7 +143,8 @@ this var is unset.
 
 Never commit `.env`. Never log request bodies from `/api/messages` —
 they contain full recipe text and prompts; token counts and stop reasons
-are the useful part and are all that is currently logged.
+are the useful part and are what's logged from that endpoint. See
+Logging below for the separate, deliberately content-free usage log.
 
 ## Commands
 

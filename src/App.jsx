@@ -148,6 +148,42 @@ async function fetchRecipeFromUrl(rawUrl) {
   return { text, method: "the page's plain text (no structured recipe data found, so this may need more cleanup than usual)" };
 }
 
+/* ================================================================== *
+ * USAGE LOGGING — counts and outcomes only, never recipe content.
+ * Fire-and-forget: a tracking failure must never surface as an app
+ * error. The server drops anything outside this allowlisted shape
+ * (see /api/track in server/index.js) and omits local/dev sessions
+ * by IP, so nothing further needs to happen on failure here either.
+ * ================================================================== */
+
+function track(type, fields) {
+  fetch("/api/track", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type, ...fields }),
+  }).catch(() => {});
+}
+
+/* Sorts a thrown Error into a short, static kind for the activity log.
+ * Matches on fixed substrings baked into the pipeline's own error
+ * messages (never on interpolated recipe content) and on the presence
+ * of `.details`, which callAndVerify/structure attach only for
+ * verification/validation failures. */
+function classifyError(e) {
+  const msg = String(e?.message || "");
+  if (Array.isArray(e?.details)) return "verification_failed";
+  if (msg.includes("cut off repeatedly")) return "truncated";
+  if (msg.includes("did not return usable JSON")) return "json_parse";
+  const status = msg.match(/\((\d{3})\)/);
+  if (status) return `http_${status[1]}`;
+  if (msg.includes("Couldn't reach")) return "network";
+  if (msg.includes("isn't allowed") || msg.includes("resolve that hostname") || msg.includes("valid URL") || msg.includes("http and https")) return "blocked_or_invalid_url";
+  if (msg.includes("isn't an HTML page")) return "not_html";
+  if (msg.includes("readable recipe content")) return "no_content";
+  if (msg.includes("redirected")) return "redirect_error";
+  return "other";
+}
 
 /* ================================================================== *
  * PASS 1 — holistic analysis, split into two smaller-output calls
@@ -905,8 +941,10 @@ export default function RecipeGridConverter() {
       setText(fetched);
       setFetchedFrom({ url: urlInput.trim(), method });
       setUrlTextLoaded(true);
+      track("url_fetch", { outcome: "success" });
     } catch (e) {
       setUrlError(e.message);
+      track("url_fetch", { outcome: "failure", kind: classifyError(e) });
     } finally {
       setUrlFetching(false);
     }
@@ -915,16 +953,21 @@ export default function RecipeGridConverter() {
   async function run() {
     setScreen("result"); setView("grid"); setReviewOpen(false);
     setError(null); setAnalysis(null); setLabels([]); setRemoved([]); setTree(null); setStatus("Starting");
+    const convertMode = mode;
+    let stage = "analysis";
     try {
       const a = await analyze(lines, setStatus);
       const composed = a.ingredients.map(composeIngredient);
       setAnalysis(a); setLabels(composed); setRemoved([]);
       const steps = a.steps.map((s) => stepText(s, lines));
       const usedInByIndex = a.ingredients.map((ing) => ing.usedIn);
+      stage = "structure";
       const t = await structure(composed, steps, usedInByIndex, setStatus);
       setTree({ ...t, count: composed.length });
+      track("convert", { mode: convertMode, outcome: "success" });
     } catch (e) {
       setError({ message: e.message, details: e.details });
+      track("convert", { mode: convertMode, outcome: "failure", stage, kind: classifyError(e) });
     } finally { setStatus(""); }
   }
 
