@@ -69,6 +69,9 @@ app.post("/api/track", (req, res) => {
  * both "no key configured" and "wrong key" so the endpoint's existence
  * isn't distinguishable from any other 404. */
 const STATS_KEY = process.env.STATS_KEY;
+console.log(STATS_KEY
+  ? `[activity] STATS_KEY configured: length ${STATS_KEY.length}, ${STATS_KEY.slice(0, 4)}…${STATS_KEY.slice(-4)}`
+  : "[activity] STATS_KEY not set — /api/stats disabled");
 app.get("/api/stats", (req, res) => {
   if (!STATS_KEY || req.query.key !== STATS_KEY) return res.status(404).end();
   res.type("html").send(renderStatsHtml(summarize()));
