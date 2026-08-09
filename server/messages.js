@@ -22,20 +22,52 @@ const DAILY_CALL_LIMIT = Number(process.env.DAILY_CALL_LIMIT || 300);
  * Never set this in Railway — production always uses ANTHROPIC_API_KEY. */
 const AUTH_MODE = process.env.ANTHROPIC_AUTH_MODE === "oauth" ? "oauth" : "api_key";
 
-/* OAuth access tokens are short-lived and `ant auth print-credentials`
- * refreshes automatically, so fetching fresh on every call — rather than
- * caching one — is the safe way to use it from a long-running dev server. */
+/* A single conversion fires several concurrent Anthropic calls (windowed
+ * ingredient extraction runs in parallel). Spawning `ant auth
+ * print-credentials` per call let concurrent invocations race on ant's
+ * credential file during a token refresh, intermittently failing one of
+ * them. Cache the token for a few minutes and single-flight concurrent
+ * fetches so at most one `ant` process runs at a time. */
+const OAUTH_TOKEN_TTL_MS = 5 * 60 * 1000;
+let cachedOAuthHeaders = null; // { headers, fetchedAt }
+let oauthFetchInFlight = null;
+
 async function oauthHeaders() {
+  if (cachedOAuthHeaders && Date.now() - cachedOAuthHeaders.fetchedAt < OAUTH_TOKEN_TTL_MS) {
+    return cachedOAuthHeaders.headers;
+  }
+  if (!oauthFetchInFlight) {
+    oauthFetchInFlight = fetchOAuthHeaders().finally(() => { oauthFetchInFlight = null; });
+  }
+  const headers = await oauthFetchInFlight;
+  cachedOAuthHeaders = { headers, fetchedAt: Date.now() };
+  return headers;
+}
+
+async function fetchOAuthHeaders() {
   let stdout;
   try {
     ({ stdout } = await execFileAsync(
       "ant",
       ["auth", "print-credentials", "--access-token"],
-      { timeout: 10000 },
+      { timeout: 30000 },
     ));
   } catch (e) {
+    // A killed-by-timeout error carries no stdout/stderr (the process never
+    // got to print), so the generic message below would be as useless as
+    // the one this replaced. `ant` only hits the network when the token
+    // actually needs refreshing, so this is rare but real — surface it
+    // distinctly rather than implying a login problem.
+    if (e.killed) {
+      throw new Error(
+        "Couldn't get Claude subscription credentials via `ant`: the request " +
+        "timed out after 30s, likely while refreshing your access token over " +
+        "the network. Try again.",
+      );
+    }
+    const detail = e.stderr?.trim() || e.message;
     throw new Error(
-      `Couldn't get Claude subscription credentials via \`ant\`: ${e.message}. ` +
+      `Couldn't get Claude subscription credentials via \`ant\`: ${detail}. ` +
       `Is the ant CLI installed and are you logged in (\`ant auth login\`)?`,
     );
   }

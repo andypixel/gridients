@@ -554,31 +554,50 @@ const STRUCTURE_PROMPT = `You turn an analyzed recipe into a nested preparation 
 
 Node = an integer (index of an ingredient) | { "op": string, "id"?: string, "children": Node[] }
 
-- "prep" holds setup that involves NO listed ingredient at all: preheating, greasing pans, bringing water to a boil. Under 8 words each. May be empty.
-- "asides" holds a step involving NO listed ingredient at all that DOES have a specific moment it must be ready by: "heat the skillet while prepping the rest", "let the dough rest 10 min before shaping". "anchor" is the "id" of the op node it must be ready by. Under 8 words each. May be empty. Don't use this for setup with no particular timing — that's "prep".
-- The test for "prep"/"asides" is only ever "does this step name or touch a listed ingredient?" — never whether the recipe's own wording sounds like an aside. A step like "fry the egg, set aside" NAMES the egg, so it is never "prep" or "asides" no matter that it literally says "set aside" — it is a tree node instead (see the next rule), full stop. Never emit both a tree node and a prep/aside entry for the same action.
+- "prep" holds setup that involves NO listed ingredient at all AND has no specific moment it needs to be ready by — it could just as well happen whenever, so it always renders before everything else with no timing information at all: preheating an oven, greasing a pan. Under 8 words each. May be empty.
+- "asides" holds a step involving NO listed ingredient at all that DOES have a specific moment it must be ready by: "heat the skillet while prepping the rest", "bring a pot of water to a boil, timed for when the pasta goes in". "anchor" is the "id" of the op node it must be ready by. Under 8 words each. May be empty. When unsure between "prep" and "asides", prefer "asides" with a real anchor — "prep" throws the timing away entirely, so only use it for something that's genuinely independent of when anything else happens. A step that has to wait for something else first (a boil that only starts after a long refrigeration, say) is never "prep," anchored or not.
+- The test for "prep"/"asides" is only ever "does this step name or touch a listed ingredient?" — never whether the recipe's own wording sounds like prep or an aside. A step like "fry the egg, set aside" NAMES the egg, so it is never "prep" or "asides" no matter that it literally says "set aside" — it is a tree node instead (see the next rule), full stop. Same test for "bring salted water to a boil" whenever salt is a listed ingredient: that salt needs a real home in the tree — a small node combining it with whatever it's boiled or seasoned into — not a prep/aside entry, which would leave it with nowhere to go but wherever you place it out of desperation (often the very last step, which is wrong). Never emit both a tree node and a prep/aside entry for the same action.
 - "id" on an op node is optional — set it only when an aside needs to anchor to that exact node. Omit it everywhere else.
 - Every ingredient index appears exactly once in the tree. The list has already been split so that no ingredient is used twice.
 - "op" is a terse imperative label, 1-6 words: "melt", "mix", "fold in", "simmer 1 hr", "bake 350F 30-40 min". Carry over temperature and time when the step gives them.
 - Each op node's children are exactly what is combined at that moment: ingredients entering directly, plus any sub-preparation already assembled.
 - The root op is the final action.
 - Child order sets the row order of the chart, so ingredients combined in the same step must be adjacent.
+- Column order follows this same child order, so when a node's children include more than one nested sub-preparation (not just raw ingredients), order those sub-preparations by real-world start time, left to right — the one that must begin earliest or takes the longest lead (marinating, refrigerating, proofing, a component made well ahead) goes first, even though it only rejoins the rest much later. Never let a quick step that starts late sort before a slow step that starts early just because the quick step's own branch is shallow.
+- The same rule applies to a byproduct one branch produces that another branch consumes — reserved pasta water, rendered fat, a strained-off liquid. It does not exist until its producing branch (the boil, the browning) has resolved, so it can NEVER enter the tree as a raw ingredient under an earlier sibling, no matter how early that ingredient sits in the ingredient list or how early its other uses are. It belongs only inside the producing branch itself, in a node that comes after it, or wherever that branch's output finally merges with the rest. Reserved pasta water is exactly this case whenever it appears: it doesn't exist until the pasta has already been boiling for a while, so a "make the sauce" branch that uses a splash of it can never be the sibling listed before the branch that boils the pasta — reorder them, or nest the pasta water's use inside/after the boiling branch instead.
 - Merge instructions describing one physical action; split an instruction that assembles two independent sub-preparations.
 - An ingredient prepared apart and stirred in late — a roux, a slurry, a garnish, a fried egg set aside for topping — is its own subtree joined at the step where it meets the rest.`;
 
-function validateTree(tree, count, asides) {
+/* usedInByIndex[i] is ingredient i's list of original-recipe step numbers
+ * (from Pass 1), same index space as `count`. When given, this also
+ * checks that sibling sub-preparations are ordered left to right by
+ * which one's ingredients are first referenced in the directions — a
+ * deterministic stand-in for "which branch has to start earliest,"
+ * since column order follows child order (see STRUCTURE_PROMPT) and
+ * nothing else here can check that a model got that ordering right. */
+function validateTree(tree, count, asides, usedInByIndex) {
   const errors = [];
   const found = [];
   const ids = new Map();
-  (function walk(node, depth) {
-    if (depth > 25) { errors.push("Tree is nested more than 25 levels deep."); return; }
+  const checkOrder = Array.isArray(usedInByIndex);
+
+  function earliestUse(index) {
+    const u = usedInByIndex && usedInByIndex[index];
+    return Array.isArray(u) && u.length ? Math.min(...u) : Infinity;
+  }
+
+  function walk(node, depth) {
+    if (depth > 25) { errors.push("Tree is nested more than 25 levels deep."); return Infinity; }
     if (typeof node === "number") {
-      if (!Number.isInteger(node) || node < 0 || node >= count) errors.push(`Ingredient index ${node} is out of range (0-${count - 1}).`);
-      else found.push(node);
-      return;
+      if (!Number.isInteger(node) || node < 0 || node >= count) {
+        errors.push(`Ingredient index ${node} is out of range (0-${count - 1}).`);
+        return Infinity;
+      }
+      found.push(node);
+      return earliestUse(node);
     }
     if (!node || typeof node !== "object" || typeof node.op !== "string" || !node.op.trim()) {
-      errors.push("A step is missing its op label."); return;
+      errors.push("A step is missing its op label."); return Infinity;
     }
     if (node.id !== undefined) {
       if (typeof node.id !== "string" || !node.id.trim()) errors.push(`Step "${node.op}" has an invalid id.`);
@@ -586,10 +605,25 @@ function validateTree(tree, count, asides) {
       else ids.set(node.id, true);
     }
     if (!Array.isArray(node.children) || node.children.length === 0) {
-      errors.push(`Step "${node.op}" has no inputs.`); return;
+      errors.push(`Step "${node.op}" has no inputs.`); return Infinity;
     }
-    node.children.forEach((c) => walk(c, depth + 1));
-  })(tree, 0);
+
+    let ownEarliest = Infinity;
+    let latestSoFar = -Infinity;
+    node.children.forEach((c) => {
+      const childEarliest = walk(c, depth + 1);
+      ownEarliest = Math.min(ownEarliest, childEarliest);
+      if (checkOrder && typeof c !== "number") {
+        if (childEarliest < latestSoFar) {
+          errors.push(`Step "${c.op}" (earliest use: step ${childEarliest}) is listed after a sibling sub-preparation used later (step ${latestSoFar}) under "${node.op}" — order sibling sub-preparations left to right by when their ingredients are first used in the directions.`);
+        } else {
+          latestSoFar = Math.max(latestSoFar, childEarliest);
+        }
+      }
+    });
+    return ownEarliest;
+  }
+  walk(tree, 0);
 
   const seen = new Set();
   found.forEach((i) => {
@@ -610,7 +644,7 @@ function validateTree(tree, count, asides) {
   return errors;
 }
 
-async function structure(ingredients, steps, onStatus) {
+async function structure(ingredients, steps, usedInByIndex, onStatus) {
   const messages = [{
     role: "user",
     content: `Ingredients (use these indices):\n${ingredients.map((l, i) => `${i}. ${l}`).join("\n")}\n\nSteps:\n${steps.map((s, i) => `${i + 1}. ${s}`).join("\n")}`,
@@ -629,7 +663,7 @@ async function structure(ingredients, steps, onStatus) {
       continue;
     }
 
-    const errors = validateTree(parsed.tree, ingredients.length, parsed.asides);
+    const errors = validateTree(parsed.tree, ingredients.length, parsed.asides, usedInByIndex);
     if (!errors.length) return parsed;
     if (attempt === 1) {
       const err = new Error("The tree failed validation twice.");
@@ -652,6 +686,7 @@ export function layoutTree(tree) {
   const leaves = [];
   const cells = [];
   const idToCol = new Map();
+  const idToLabel = new Map();
   let nextCol = 0;
   function walk(node) {
     if (typeof node === "number") {
@@ -667,12 +702,12 @@ export function layoutTree(tree) {
       end = Math.max(end, r.end);
     });
     cells.push({ op: node.op, row: start, rowSpan: end - start + 1, col: nextCol, colSpan: 1 });
-    if (node.id) idToCol.set(node.id, nextCol);
+    if (node.id) { idToCol.set(node.id, nextCol); idToLabel.set(node.id, node.op); }
     nextCol += 1;
     return { start, end };
   }
   walk(tree);
-  return { leaves, cells, cols: nextCol, rows: leaves.length, idToCol };
+  return { leaves, cells, cols: nextCol, rows: leaves.length, idToCol, idToLabel };
 }
 
 export function fillGaps(cells, rows, cols) {
@@ -719,13 +754,13 @@ export function orderForEntry(node) {
 }
 
 export function buildGrid(tree, asides) {
-  const { leaves, cells, cols, rows, idToCol } = layoutTree(orderForEntry(tree));
+  const { leaves, cells, cols, rows, idToCol, idToLabel } = layoutTree(orderForEntry(tree));
   const all = [...cells, ...fillGaps(cells, rows, cols)];
   const byRow = Array.from({ length: rows }, () => []);
   all.forEach((c) => byRow[c.row].push(c));
   byRow.forEach((r) => r.sort((a, b) => a.col - b.col));
   const resolvedAsides = (asides || [])
-    .map((a) => ({ text: a.text, col: idToCol.get(a.anchor) }))
+    .map((a) => ({ text: a.text, col: idToCol.get(a.anchor), target: idToLabel.get(a.anchor) }))
     .filter((a) => Number.isInteger(a.col))
     .sort((a, b) => a.col - b.col);
   return { leaves, byRow, cols, rows, asides: resolvedAsides };
@@ -743,10 +778,12 @@ function exportHTML(grid, ingredients, prep, title) {
   const width = grid.cols + 1;
   const rows = (prep || []).map((p) => `<tr><td colspan="${width}" style="${b}${pad}text-align:center;">${esc(p)}</td></tr>`);
   (grid.asides || []).forEach((a) => {
-    const span = a.col + 2;
-    const fill = width - span;
-    const filler = fill > 0 ? `<td colspan="${fill}" style="${b}"></td>` : "";
-    rows.push(`<tr><td colspan="${span}" style="${b}${pad}text-align:right;font-style:italic;border-left:3px solid #C9A576;">${esc(a.text)}</td>${filler}</tr>`);
+    const before = a.col + 1;
+    const after = grid.cols - 1 - a.col;
+    const beforeCell = before > 0 ? `<td colspan="${before}" style="${b}"></td>` : "";
+    const afterCell = after > 0 ? `<td colspan="${after}" style="${b}"></td>` : "";
+    const target = a.target ? `<br><span style="font-size:10px;font-style:normal;text-transform:uppercase;color:#666;">ready for: ${esc(a.target)}</span>` : "";
+    rows.push(`<tr>${beforeCell}<td style="${b}${pad}text-align:center;font-style:italic;border-left:3px solid #C9A576;border-right:3px solid #C9A576;">${esc(a.text)}${target}</td>${afterCell}</tr>`);
   });
   grid.byRow.forEach((cells, r) => {
     const ing = `<td style="${b}${pad}">${esc(ingredients[grid.leaves[r]])}</td>`;
@@ -790,12 +827,16 @@ export function GridTable({ title, activeLabels, grid, prep }) {
               <tr key={`p${i}`}><td className="rg-prep" colSpan={grid.cols + 1}>{p}</td></tr>
             ))}
             {(grid.asides || []).map((a, i) => {
-              const span = a.col + 2;
-              const fill = grid.cols + 1 - span;
+              const before = a.col + 1;
+              const after = grid.cols - 1 - a.col;
               return (
                 <tr key={`a${i}`}>
-                  <td className="rg-prep rg-aside" colSpan={span}>{a.text}</td>
-                  {fill > 0 && <td className="rg-gap" colSpan={fill} />}
+                  {before > 0 && <td className="rg-gap" colSpan={before} />}
+                  <td className="rg-aside">
+                    {a.text}
+                    {a.target && <em className="rg-aside-target">ready for: {a.target}</em>}
+                  </td>
+                  {after > 0 && <td className="rg-gap" colSpan={after} />}
                 </tr>
               );
             })}
@@ -879,7 +920,8 @@ export default function RecipeGridConverter() {
       const composed = a.ingredients.map(composeIngredient);
       setAnalysis(a); setLabels(composed); setRemoved([]);
       const steps = a.steps.map((s) => stepText(s, lines));
-      const t = await structure(composed, steps, setStatus);
+      const usedInByIndex = a.ingredients.map((ing) => ing.usedIn);
+      const t = await structure(composed, steps, usedInByIndex, setStatus);
       setTree({ ...t, count: composed.length });
     } catch (e) {
       setError({ message: e.message, details: e.details });
@@ -890,7 +932,8 @@ export default function RecipeGridConverter() {
     setError(null); setStatus("Working out the structure");
     try {
       const steps = analysis.steps.map((s) => stepText(s, lines));
-      const t = await structure(activeLabels, steps, setStatus);
+      const usedInByIndex = active.map(({ ing }) => ing.usedIn);
+      const t = await structure(activeLabels, steps, usedInByIndex, setStatus);
       setTree({ ...t, count: activeLabels.length });
     } catch (e) {
       setError({ message: e.message, details: e.details });
@@ -945,7 +988,7 @@ export default function RecipeGridConverter() {
             </div>
           </header>
           <p className="rg-sub">
-            When copy/pasting a recipe, be sure to include the dish title, ingredients and directions, and remove any unrelated text. The more complete the input, the better the output.
+            When copy/pasting a recipe, be sure to include the name of the dish, ingredients and directions, and remove any unrelated text. The more complete the input, the better the output.
           </p>
 
           <section className="rg-panel">
@@ -1306,8 +1349,15 @@ html, body, #root { height: 100%; margin: 0; }
 .rg-ingcell { padding: 6px 9px; font-size: 14px; font-family: var(--font-serif); }
 .rg-prep { padding: 6px 9px; text-align: center; font-size: 13px; }
 .rg-gap { background: repeating-linear-gradient(135deg, transparent, transparent 7px, var(--grid) 7px, var(--grid) 8px); }
-.rg-aside { font-family: var(--font-hand); font-size: 16px; text-align: right; }
-.rg-table td.rg-aside { border-left: var(--border-width-accent) solid var(--spill); }
+.rg-aside {
+  padding: 6px 9px; text-align: center; vertical-align: middle;
+  font-family: var(--font-hand); font-size: 16px; background: var(--paper);
+}
+.rg-table td.rg-aside { border-left: var(--border-width-accent) solid var(--spill); border-right: var(--border-width-accent) solid var(--spill); }
+.rg-aside-target {
+  display: block; margin-top: 3px; font-family: var(--font-mono); font-style: normal;
+  font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-dim);
+}
 .rg-op {
   padding: 6px 10px; text-align: center; vertical-align: middle;
   font-size: 11.5px; background: color-mix(in srgb, var(--spill) 20%, var(--paper)); color: var(--ink);
